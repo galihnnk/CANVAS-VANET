@@ -61,67 +61,11 @@ Install dependencies
 
 bashpip install -r requirements.txt
 
-Prepare SUMO FCD data
-
-bash# Generate FCD output from SUMO
-sumo -c your_scenario.sumocfg --fcd-output fcd-output.xml
-Quick Start
-
-Configure the simulation (edit configuration section in the script):
-
-python# Basic Configuration
-FCD_FILE = "your-fcd-output.xml"
-ENABLE_RL = True
-ENABLE_LAYER3 = True
-ROUTING_PROTOCOL = "AODV"
-ANTENNA_TYPE = "SECTORAL"
-
-Run the simulation:
-
-bashpython canvas_simulation.py
-
-View results:
-
-
-Excel files with comprehensive analysis
-Real-time CSV for monitoring
-Attack detection datasets (if enabled)
-
 🔍 Real-time Monitoring
 
 Live CSV: Real-time performance data with 100+ metrics
 Progressive Excel: Continuously updated results during simulation
 
-🛡️ Security Analysis
-
-Attack Dataset: ML-ready feature vectors for attack detection
-Impact Analysis: Network performance under various attack scenarios
-
-🎮 Usage Examples
-Basic VANET Simulation
-python# Configure for basic highway simulation
-FCD_FILE = "highway_scenario.xml"
-ENABLE_RL = False
-ROUTING_PROTOCOL = "AODV"
-ANTENNA_TYPE = "OMNIDIRECTIONAL"
-RL-Optimized Sectoral Antennas
-python# Advanced setup with RL optimization
-ENABLE_RL = True
-ANTENNA_TYPE = "SECTORAL"
-RL_CONTROLLED_SECTORS = ['front', 'rear']
-RL_HOST = '127.0.0.1'
-RL_PORT = 5000
-Attack Simulation Research
-python# Security research configuration
-ENABLE_ATTACK_SIMULATION = True
-ATTACK_TYPE = "COMBINED"
-NUMBER_OF_ATTACKERS = 10
-GENERATE_ATTACK_DATASET = True
-Extended Training Dataset
-python# Generate large training datasets
-FCD_RELOAD_COUNT = 5  # 5x longer simulation
-FCD_RELOAD_VEHICLE_ID_STRATEGY = "suffix"
-ENABLE_REALTIME_CSV = True
 🔬 Research Applications
 
 Protocol Evaluation: Compare routing protocols under various conditions
@@ -131,39 +75,6 @@ Performance Analysis: Study VANET behavior in realistic scenarios
 Traffic Engineering: Optimize network resource allocation
 Antenna Design: Evaluate directional vs omnidirectional antenna systems
 
-🤝 Contributing
-We welcome contributions! Please see our Contributing Guidelines for details.
-Development Setup
-bash# Fork and clone the repository
-git clone https://github.com/galihnnk/CANVAS-VANET.git
-
-# Submit a pull request
-📚 Documentation
-
-API Reference: Detailed class and method documentation
-Protocol Details: Routing protocol implementations
-Performance Tuning: Optimization guidelines
-Attack Simulation: Security testing guide
-
-🐛 Troubleshooting
-Common Issues
-
-FCD File Not Found
-bash[ERROR] FCD file not found: your-file.xml
-Solution: Ensure the FCD file path is correct and the file exists.
-RL Connection Failed
-bash[RL ERROR] Failed to connect to RL server
-Solution: Start your RL server before running the simulation or disable RL.
-Memory Issues with Large Simulations
-
-Reduce FCD_RELOAD_COUNT
-Disable real-time visualization
-Use smaller FCD files
-
-
-
-📄 License
-This project is licensed under the MIT License - see the LICENSE file for details.
 🙏 Acknowledgments
 
 SUMO Traffic Simulator: Eclipse SUMO team for traffic simulation framework
@@ -172,7 +83,7 @@ Research Community: VANET researchers for protocol implementations and validatio
 
 📧 Contact
 
-Project Maintainer: Your Name
+Project Maintainer: Galih Nugraha Nurkahfi
 Issues: Please use GitHub Issues for bug reports and feature requests
 Discussions: Use GitHub Discussions for questions and ideas
 
@@ -185,5 +96,3 @@ bibtex@software{canvas_vanet_2024,
   url={https://github.com/yourusername/CANVAS-VANET},
   note={IEEE 802.11bd VANET Simulation Framework with RL Optimization}
 }
-
-⭐ Star this repository if CANVAS helps your research! ⭐
