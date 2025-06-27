@@ -87,58 +87,6 @@ Excel files with comprehensive analysis
 Real-time CSV for monitoring
 Attack detection datasets (if enabled)
 
-⚙️ Configuration Guide
-🎛️ Core Settings
-ParameterDescriptionOptionsFCD_FILEPath to SUMO FCD XML fileAny valid XML pathENABLE_RLReinforcement Learning optimizationTrue/FalseENABLE_LAYER3Layer 3 routing protocolsTrue/FalseROUTING_PROTOCOLRouting algorithm"AODV", "OLSR", "GEOGRAPHIC"ENABLE_SDNSoftware-Defined NetworkingTrue/FalseANTENNA_TYPEAntenna configuration"OMNIDIRECTIONAL", "SECTORAL"
-📡 Antenna Configuration
-python# Sectoral Antenna (RL-optimized front/rear, static sides)
-SECTORAL_ANTENNA_CONFIG = {
-    "front": {"power_dbm": 12.0, "gain_db": 8.0, "beamwidth_deg": 60},
-    "rear": {"power_dbm": 8.0, "gain_db": 8.0, "beamwidth_deg": 60},
-    "left": {"power_dbm": 3.0, "gain_db": 5.0, "beamwidth_deg": 90},
-    "right": {"power_dbm": 3.0, "gain_db": 5.0, "beamwidth_deg": 90}
-}
-🛡️ Attack Simulation
-python# Enable DoS/DDoS attack simulation
-ENABLE_ATTACK_SIMULATION = True
-ATTACK_TYPE = "COMBINED"  # or "BEACON_FLOODING", "HIGH_POWER_JAMMING"
-NUMBER_OF_ATTACKERS = 5
-GENERATE_ATTACK_DATASET = True  # For ML research
-🔄 Extended Training
-python# FCD Data Reloading for Extended Training
-FCD_RELOAD_COUNT = 3  # 3x simulation duration
-FCD_RELOAD_VEHICLE_ID_STRATEGY = "suffix"  # or "reuse"
-📁 Project Structure
-CANVAS-VANET/
-├── canvas_simulation.py      # Main simulation script
-├── requirements.txt          # Python dependencies
-├── README.md                # This file
-├── examples/                # Example configurations
-│   ├── highway_scenario.py
-│   ├── urban_intersection.py
-│   └── attack_simulation.py
-├── docs/                    # Documentation
-│   ├── API_Reference.md
-│   ├── Protocol_Details.md
-│   └── Performance_Tuning.md
-├── results/                 # Output directory
-│   ├── excel_outputs/
-│   ├── csv_realtime/
-│   └── attack_datasets/
-└── visualization/           # Visualization outputs
-    ├── plots/
-    └── animations/
-📊 Output Files
-📈 Performance Analysis
-
-Main Results: Training-conventionalsac-alternative-45cars-10000seconds.xlsx
-
-Multi-sheet analysis with PHY/MAC/Network metrics
-Episode-by-episode performance tracking
-Statistical summaries and correlations
-
-
-
 🔍 Real-time Monitoring
 
 Live CSV: Real-time performance data with 100+ metrics
