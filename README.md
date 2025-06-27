@@ -1,8 +1,5 @@
-Comprehensive Adaptive Network for VANET Simulation (CANVAS) 🚗📡
+Comprehensive Adaptive Network for VANET Simulation (CANVAS)
 A comprehensive Python-based VANET (Vehicular Ad-hoc Network) simulation framework featuring IEEE 802.11bd wireless communication, multiple routing protocols, SDN capabilities, reinforcement learning optimization, and advanced attack simulation.
-Tampilkan Gambar
-Tampilkan Gambar
-Tampilkan Gambar
 🎯 Overview
 CANVAS is a state-of-the-art VANET simulation platform that combines realistic vehicular mobility (via SUMO), advanced wireless communication modeling, and cutting-edge network optimization techniques. It provides researchers and engineers with a comprehensive tool for evaluating VANET protocols, security mechanisms, and performance optimization strategies.
 ✨ Key Features
@@ -57,7 +54,7 @@ Installation
 
 Clone the repository
 
-bashgit clone https://github.com/yourusername/CANVAS-VANET.git
+bashgit clone https://github.com/galihnnk/CANVAS-VANET.git
 cd CANVAS-VANET
 
 Install dependencies
@@ -190,13 +187,7 @@ Antenna Design: Evaluate directional vs omnidirectional antenna systems
 We welcome contributions! Please see our Contributing Guidelines for details.
 Development Setup
 bash# Fork and clone the repository
-git clone https://github.com/yourusername/CANVAS-VANET.git
-
-# Create a development branch
-git checkout -b feature/your-feature-name
-
-# Make your changes and test
-python -m pytest tests/
+git clone https://github.com/galihnnk/CANVAS-VANET.git
 
 # Submit a pull request
 📚 Documentation
