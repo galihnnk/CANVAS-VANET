@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Comprehensive FCD Data Generator for Variable Density VANET Learning
+by Galih Nugraha Nurkahfi, galih.nugraha.nurkahfi@brin.go.id
 ====================================================================
 
 Generates realistic FCD files with:
