@@ -62,6 +62,104 @@ except ImportError:
 
 
 # ===============================================================================
+# GPU SELECTION CONFIGURATION
+# ===============================================================================
+
+# GPU Selection Settings
+FORCE_SPECIFIC_GPU = True  # Set to True to force specific GPU
+FORCED_GPU_ID = 0          # GPU ID to force (0, 1, 2, etc.)
+PREFER_DISCRETE_GPU = True  # Prefer discrete over integrated GPU
+MIN_GPU_MEMORY_GB = 2.0    # Minimum GPU memory required (GB)
+
+# GPU Selection Priorities (in order)
+GPU_SELECTION_CRITERIA = [
+    "discrete_over_integrated",  # Prefer discrete GPUs
+    "most_free_memory",         # Select GPU with most free memory
+    "highest_compute_capability", # Prefer newer GPU architecture
+    "avoid_display_gpu"         # Avoid GPU driving the display (if possible)
+]
+
+def select_optimal_gpu():
+    """Simple GPU selection based on configuration"""
+    if not GPU_AVAILABLE:
+        return None
+    
+    try:
+        device_count = cp.cuda.runtime.getDeviceCount()
+        print(f"[GPU SELECTION] Found {device_count} GPU(s)")
+        
+        if device_count == 0:
+            return None
+        
+        # Force specific GPU if requested
+        if FORCE_SPECIFIC_GPU:
+            if FORCED_GPU_ID < device_count:
+                cp.cuda.Device(FORCED_GPU_ID).use()
+                print(f"[GPU SELECTION] Forced GPU {FORCED_GPU_ID}")
+                return FORCED_GPU_ID
+            else:
+                print(f"[GPU SELECTION] Forced GPU {FORCED_GPU_ID} not available")
+                return None
+        
+        # Auto-select best GPU
+        best_gpu = 0
+        best_score = -1
+        
+        for gpu_id in range(device_count):
+            with cp.cuda.Device(gpu_id):
+                props = cp.cuda.runtime.getDeviceProperties(gpu_id)
+                meminfo = cp.cuda.runtime.memGetInfo()
+                
+                name = props['name'].decode('utf-8')
+                free_memory_gb = meminfo[0] / (1024**3)
+                total_memory_gb = props['totalGlobalMem'] / (1024**3)
+                compute_capability = props['major'] + props['minor'] * 0.1
+                
+                # Check minimum memory requirement
+                if free_memory_gb < MIN_GPU_MEMORY_GB:
+                    print(f"[GPU {gpu_id}] {name}: Insufficient memory ({free_memory_gb:.1f} < {MIN_GPU_MEMORY_GB} GB)")
+                    continue
+                
+                # Calculate selection score
+                score = 0
+                
+                # Discrete GPU bonus
+                is_integrated = any(keyword in name for keyword in ['Integrated', 'UHD', 'Vega'])
+                if PREFER_DISCRETE_GPU and not is_integrated:
+                    score += 100
+                
+                # Memory score (normalized)
+                score += free_memory_gb * 10
+                
+                # Compute capability score
+                score += compute_capability * 5
+                
+                # Avoid display GPU (usually GPU 0)
+                if gpu_id > 0:
+                    score += 20
+                
+                print(f"[GPU {gpu_id}] {name}: {free_memory_gb:.1f}/{total_memory_gb:.1f} GB, Score: {score:.1f}")
+                
+                if score > best_score:
+                    best_gpu = gpu_id
+                    best_score = score
+        
+        if best_score > -1:
+            cp.cuda.Device(best_gpu).use()
+            with cp.cuda.Device(best_gpu):
+                props = cp.cuda.runtime.getDeviceProperties(best_gpu)
+                name = props['name'].decode('utf-8')
+            print(f"[GPU SELECTION] Selected GPU {best_gpu}: {name}")
+            return best_gpu
+        else:
+            print("[GPU SELECTION] No suitable GPU found")
+            return None
+            
+    except Exception as e:
+        print(f"[GPU SELECTION ERROR] {e}")
+        return None
+
+# ===============================================================================
 # SIMULATION CONFIGURATION - MODIFY THESE PARAMETERS
 # ===============================================================================
 
@@ -415,6 +513,14 @@ class ParallelComputationManager:
     def __init__(self, config):
         self.config = config
         self.computation_mode = 'serial'
+        
+        # Simple GPU selection
+        if GPU_AVAILABLE and PREFER_GPU_ACCELERATION:
+            selected_gpu = select_optimal_gpu()
+            if selected_gpu is not None:
+                print(f"[GPU READY] Using GPU {selected_gpu} for acceleration")
+            else:
+                print("[GPU FALLBACK] No suitable GPU, using CPU/Serial")
         
         # FIXED: Safe batch size initialization
         try:
