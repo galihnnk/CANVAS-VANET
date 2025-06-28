@@ -800,10 +800,10 @@ def main():
     print(" Comprehensive FCD Generator for Variable Density Learning")
     print("=" * 60)
     print(f" Scenario: {SCENARIO}")
-    print(f"⏱  Duration: {DURATION} seconds")
-    print(f"🛣  Road: {ROAD_LENGTH}m with {NUM_LANES_PER_DIRECTION*2} lanes")
+    print(f"  Duration: {DURATION} seconds")
+    print(f"  Road: {ROAD_LENGTH}m with {NUM_LANES_PER_DIRECTION*2} lanes")
     print(f" Output: {OUTPUT_FILE}")
-    print(f"👁  Visualization: {'Enabled' if ENABLE_VISUALIZATION else 'Disabled'}")
+    print(f"  Visualization: {'Enabled' if ENABLE_VISUALIZATION else 'Disabled'}")
     
     # Generate FCD
     generator = ComprehensiveFCDGenerator(config)
