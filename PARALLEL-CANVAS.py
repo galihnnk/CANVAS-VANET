@@ -413,19 +413,51 @@ class ParallelComputationManager:
             print(f"[PARALLEL] Using thread-based CPU parallelism (avoids pickling issues)")
     
     def _initialize_computation_mode(self):
-        """Initialize the best available computation mode"""
-        if ENABLE_PARALLEL_PROCESSING and PREFER_GPU_ACCELERATION and self.gpu_available:
+        """Initialize the best available computation mode with GPU preference"""
+        if not ENABLE_PARALLEL_PROCESSING:
+            self.computation_mode = 'serial'
+            print("[PARALLEL] Parallel processing disabled by configuration")
+            return
+        
+        # GPU preference - try GPU first if available and preferred
+        if PREFER_GPU_ACCELERATION and self.gpu_available:
+            print("[PARALLEL] Testing GPU computation (preferred)...")
             if self._test_gpu_computation():
                 self.computation_mode = 'gpu'
+                print("[PARALLEL] ✓ GPU mode selected (preferred)")
                 return
+            else:
+                print("[PARALLEL] ✗ GPU test failed, falling back to CPU")
         
-        if ENABLE_PARALLEL_PROCESSING and self.cpu_cores > 1:
+        # CPU parallel processing as fallback
+        if self.cpu_cores > 1:
+            print(f"[PARALLEL] Testing CPU parallel processing ({self.cpu_cores} cores)...")
             if self._test_cpu_computation():
                 self.computation_mode = 'cpu'
+                print(f"[PARALLEL] ✓ CPU parallel mode selected ({self.cpu_cores} cores)")
                 return
+            else:
+                print("[PARALLEL] ✗ CPU parallel test failed, falling back to serial")
         
+        # Serial processing as final fallback
         self.computation_mode = 'serial'
-        print("[PARALLEL] Using serial computation")
+        print("[PARALLEL] ✓ Serial mode selected (fallback)")
+        
+        # Additional GPU diagnostic if GPU was preferred but failed
+        if PREFER_GPU_ACCELERATION and self.gpu_available and self.computation_mode != 'gpu':
+            print("[PARALLEL] GPU Diagnostic:")
+            print(f"  - GPU Available: {GPU_AVAILABLE}")
+            print(f"  - CuPy installed: {'Yes' if GPU_AVAILABLE else 'No'}")
+            if GPU_AVAILABLE:
+                try:
+                    import cupy as cp
+                    print(f"  - GPU Memory: {cp.get_default_memory_pool().total_bytes() / (1024**3):.1f} GB")
+                    print(f"  - GPU Device: {cp.cuda.runtime.getDeviceProperties(0)['name'].decode()}")
+                except Exception as e:
+                    print(f"  - GPU Error: {e}")
+            else:
+                print("  - Install CuPy with: pip install cupy-cuda11x (replace 11x with your CUDA version)")
+                print("  - Or install CuPy with: pip install cupy (for CUDA auto-detection)")
     
     def _test_gpu_computation(self):
         """Test if GPU computation is working"""
@@ -5722,7 +5754,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     f"Static({static_sectors} at {SIDE_ANTENNA_STATIC_POWER}dBm)")
         
     def _initialize_parallel_processing(self):
-        """Initialize parallel processing components"""
+        """Initialize parallel processing components with proper stats structure"""
         if ENABLE_PARALLEL_PROCESSING:
             self.parallel_manager = ParallelComputationManager(self.config)
             self.parallel_neighbor_finder = ParallelNeighborFinder(
@@ -5734,6 +5766,23 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
             self.parallel_manager = None
             self.parallel_neighbor_finder = None
             print("[PARALLEL] Parallel processing disabled")
+        
+        # Initialize parallel performance stats structure
+        self.parallel_performance_stats = {
+            'gpu': [],
+            'cpu': [],
+            'serial': [],
+            'total_gpu_time': 0.0,
+            'total_cpu_time': 0.0,
+            'total_serial_time': 0.0,
+            'fallback_count': 0,
+            'peak_throughput': {'gpu': 0, 'cpu': 0, 'serial': 0},
+            'gpu_memory_history': [],
+            'batch_size_history': [],
+            'mode_switches': []
+        }
+        
+        print(f"[PARALLEL] Performance monitoring initialized")
 
     def create_vehicle_batch_from_current_vehicles(self, current_vehicles, current_time):
         """Create a batch of vehicle data for parallel processing"""
@@ -8500,8 +8549,8 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
             if self.attack_manager:
                 self._collect_attack_detection_data(current_time)
         
-        # Calculate parallel processing performance statistics (ADD THIS SECTION)
-        if hasattr(self, 'parallel_performance_stats'):
+        # Calculate parallel processing performance statistics (FIXED)
+        if hasattr(self, 'parallel_performance_stats') and self.parallel_performance_stats:
             perf_summary = self.get_parallel_performance_summary()
             
             print(f"\n[PARALLEL PERFORMANCE SUMMARY]")
@@ -8523,13 +8572,24 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
             
             # Calculate overall speedup if multiple modes were used
             if len(perf_summary['modes_used']) > 1:
-                serial_time = sum(r['processing_time'] for r in self.parallel_performance_stats.get('serial', []))
-                parallel_time = sum(r['processing_time'] for r in self.parallel_performance_stats.get('gpu', []) + 
-                                  self.parallel_performance_stats.get('cpu', []))
+                serial_time = self.parallel_performance_stats.get('total_serial_time', 0)
+                gpu_time = self.parallel_performance_stats.get('total_gpu_time', 0) 
+                cpu_time = self.parallel_performance_stats.get('total_cpu_time', 0)
+                parallel_time = gpu_time + cpu_time
                 
                 if serial_time > 0 and parallel_time > 0:
                     speedup = serial_time / parallel_time
                     print(f"  Overall parallel speedup: {speedup:.2f}x")
+                elif gpu_time > 0 or cpu_time > 0:
+                    print(f"  GPU time: {gpu_time:.2f}s, CPU time: {cpu_time:.2f}s, Serial time: {serial_time:.2f}s")
+        
+        elif self.parallel_manager:
+            print(f"\n[PARALLEL PERFORMANCE] Mode: {self.parallel_manager.get_computation_mode()}")
+            print(f"  GPU Available: {GPU_AVAILABLE}")
+            print(f"  Parallel Processing: {'Enabled' if ENABLE_PARALLEL_PROCESSING else 'Disabled'}")
+        
+        else:
+            print(f"\n[SERIAL PROCESSING] Parallel processing disabled or not available")
         
         # Calculate parallel processing performance statistics
         if self.parallel_manager:
@@ -9520,7 +9580,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         processing_time = end_time - start_time
         vehicles_per_second = vehicle_count / max(processing_time, 0.001)
         
-        # Initialize performance stats if not exists
+        # Ensure parallel_performance_stats exists and has all required keys
         if not hasattr(self, 'parallel_performance_stats'):
             self.parallel_performance_stats = {
                 'gpu': [],
@@ -9530,8 +9590,24 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                 'total_cpu_time': 0.0,
                 'total_serial_time': 0.0,
                 'fallback_count': 0,
-                'peak_throughput': {'gpu': 0, 'cpu': 0, 'serial': 0}
+                'peak_throughput': {'gpu': 0, 'cpu': 0, 'serial': 0},
+                'gpu_memory_history': [],
+                'batch_size_history': [],
+                'mode_switches': []
             }
+        
+        # Ensure all required keys exist
+        required_keys = ['gpu', 'cpu', 'serial', 'total_gpu_time', 'total_cpu_time', 'total_serial_time', 'fallback_count', 'peak_throughput']
+        for key in required_keys:
+            if key not in self.parallel_performance_stats:
+                if 'total_' in key:
+                    self.parallel_performance_stats[key] = 0.0
+                elif key == 'peak_throughput':
+                    self.parallel_performance_stats[key] = {'gpu': 0, 'cpu': 0, 'serial': 0}
+                elif key == 'fallback_count':
+                    self.parallel_performance_stats[key] = 0
+                else:
+                    self.parallel_performance_stats[key] = []
         
         # Store detailed performance data
         perf_record = {
@@ -9540,15 +9616,27 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
             'vehicle_count': vehicle_count,
             'throughput': vehicles_per_second,
             'efficiency_score': vehicle_count / max(processing_time * 1000, 1),  # vehicles per ms
-            'batch_utilization': vehicle_count / getattr(self.parallel_manager, 'optimal_batch_size', 1000) if hasattr(self, 'parallel_manager') else 1.0
+            'batch_utilization': vehicle_count / getattr(self.parallel_manager, 'optimal_batch_size', 1000) if hasattr(self, 'parallel_manager') and self.parallel_manager else 1.0
         }
+        
+        # Validate mode exists in stats
+        if mode not in self.parallel_performance_stats:
+            self.parallel_performance_stats[mode] = []
         
         self.parallel_performance_stats[mode].append(perf_record)
         
-        # Update cumulative times
-        self.parallel_performance_stats[f'total_{mode}_time'] += processing_time
+        # Update cumulative times safely
+        total_time_key = f'total_{mode}_time'
+        if total_time_key not in self.parallel_performance_stats:
+            self.parallel_performance_stats[total_time_key] = 0.0
+        self.parallel_performance_stats[total_time_key] += processing_time
         
-        # Track peak throughput
+        # Track peak throughput safely
+        if 'peak_throughput' not in self.parallel_performance_stats:
+            self.parallel_performance_stats['peak_throughput'] = {'gpu': 0, 'cpu': 0, 'serial': 0}
+        if mode not in self.parallel_performance_stats['peak_throughput']:
+            self.parallel_performance_stats['peak_throughput'][mode] = 0
+        
         if vehicles_per_second > self.parallel_performance_stats['peak_throughput'][mode]:
             self.parallel_performance_stats['peak_throughput'][mode] = vehicles_per_second
         
@@ -9590,8 +9678,15 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
     
     def get_parallel_performance_summary(self):
         """Get comprehensive parallel processing performance summary"""
-        if not hasattr(self, 'parallel_performance_stats'):
-            return {}
+        if not hasattr(self, 'parallel_performance_stats') or not self.parallel_performance_stats:
+            return {
+                'modes_used': [],
+                'total_processing_time': 0.0,
+                'average_throughput': {},
+                'peak_throughput': {},
+                'mode_efficiency_ranking': [],
+                'recommendation': 'No parallel processing data available'
+            }
         
         stats = self.parallel_performance_stats
         summary = {
@@ -9600,24 +9695,26 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
             'average_throughput': {},
             'peak_throughput': stats.get('peak_throughput', {}),
             'mode_efficiency_ranking': [],
-            'recommendation': 'No data available'
+            'recommendation': 'No data available',
+            'fallback_count': stats.get('fallback_count', 0)
         }
         
         total_time = 0.0
         mode_performance = {}
         
         for mode in ['gpu', 'cpu', 'serial']:
-            if stats.get(mode):
+            if mode in stats and stats[mode]:
                 summary['modes_used'].append(mode)
                 mode_data = stats[mode]
                 
-                avg_throughput = sum(r['throughput'] for r in mode_data) / len(mode_data)
-                avg_efficiency = sum(r['efficiency_score'] for r in mode_data) / len(mode_data)
-                total_mode_time = sum(r['processing_time'] for r in mode_data)
-                
-                summary['average_throughput'][mode] = avg_throughput
-                mode_performance[mode] = avg_efficiency
-                total_time += total_mode_time
+                if mode_data:  # Check if list is not empty
+                    avg_throughput = sum(r['throughput'] for r in mode_data) / len(mode_data)
+                    avg_efficiency = sum(r['efficiency_score'] for r in mode_data) / len(mode_data)
+                    total_mode_time = sum(r['processing_time'] for r in mode_data)
+                    
+                    summary['average_throughput'][mode] = avg_throughput
+                    mode_performance[mode] = avg_efficiency
+                    total_time += total_mode_time
         
         summary['total_processing_time'] = total_time
         
@@ -9629,17 +9726,34 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
             best_mode = summary['mode_efficiency_ranking'][0][0]
             best_efficiency = summary['mode_efficiency_ranking'][0][1]
             
-            # Generate recommendations
+            # Generate recommendations with GPU preference
             if best_mode == 'gpu' and best_efficiency > 500:
-                summary['recommendation'] = "GPU acceleration is working excellently"
+                summary['recommendation'] = "GPU acceleration is working excellently - optimal choice"
             elif best_mode == 'gpu' and best_efficiency > 200:
                 summary['recommendation'] = "GPU acceleration is working well, consider memory optimization"
+            elif 'gpu' in summary['modes_used'] and best_mode != 'gpu':
+                gpu_efficiency = mode_performance.get('gpu', 0)
+                if gpu_efficiency > 0:
+                    summary['recommendation'] = f"GPU available but {best_mode} performing better - investigate GPU bottlenecks"
+                else:
+                    summary['recommendation'] = f"GPU failed to process - check GPU setup, using {best_mode}"
             elif best_mode == 'cpu' and len(summary['modes_used']) > 1:
-                summary['recommendation'] = "CPU parallel is optimal, GPU may have issues"
+                summary['recommendation'] = "CPU parallel is optimal, GPU may have compatibility issues"
             elif best_mode == 'serial':
-                summary['recommendation'] = "Consider checking parallel processing setup - serial mode is fastest"
+                summary['recommendation'] = "Serial processing fastest - parallel overhead too high for current data size"
             else:
                 summary['recommendation'] = f"Best mode: {best_mode} with {best_efficiency:.1f} vehicles/ms efficiency"
+            
+            # Add GPU preference note
+            if GPU_AVAILABLE and 'gpu' not in summary['modes_used']:
+                summary['recommendation'] += " | Note: GPU available but not used - check GPU initialization"
+            elif not GPU_AVAILABLE:
+                summary['recommendation'] += " | Note: GPU not available - install CuPy for GPU acceleration"
+        
+        # Add resource utilization info
+        if hasattr(self, 'parallel_manager') and self.parallel_manager:
+            perf_metrics = self.parallel_manager.get_performance_metrics()
+            summary['resource_info'] = perf_metrics
         
         return summary
     
