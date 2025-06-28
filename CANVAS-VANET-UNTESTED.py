@@ -2036,55 +2036,58 @@ class IEEE80211bdMapper:
         return per
     
     def get_cbr_collision_probability(self, cbr: float, neighbor_count: int, beacon_rate: float = 10.0) -> float:
-        """ENHANCED collision probability with stronger neighbor impact modeling"""
+        """ENHANCED collision probability with slightly more aggressive neighbor impact"""
         if neighbor_count == 0:
-            return 0.001  # Slightly higher base collision rate
+            return 0.001
         
-        slot_time = 9e-6  # IEEE 802.11bd correct value
+        slot_time = 9e-6
         beacon_interval = 1.0 / beacon_rate
         slots_per_beacon = beacon_interval / slot_time
         base_tx_prob = 1.0 / slots_per_beacon
         
-        # ENHANCED: More aggressive CBR impact with steeper scaling
+        # ENHANCED: More aggressive CBR impact
         if cbr <= 0.2:
             cbr_factor = 1.0
         elif cbr <= 0.4:
-            cbr_factor = 1.25  # Increased from 1.15
+            cbr_factor = 1.3   # Increased from 1.25
         elif cbr <= 0.6:
-            cbr_factor = 1.6   # Increased from 1.4
+            cbr_factor = 1.8   # Increased from 1.6
         elif cbr <= 0.8:
-            cbr_factor = 2.2   # Increased from 1.8
+            cbr_factor = 2.5   # Increased from 2.2
         else:
-            # ENHANCED: Much more aggressive scaling for high CBR
             excess_cbr = cbr - 0.8
-            cbr_factor = 2.2 + (excess_cbr * 4.0)  # Steeper scaling above 80%
-            cbr_factor = min(cbr_factor, 4.0)  # Cap at 4x
+            cbr_factor = 2.5 + (excess_cbr * 4.5)  # Increased from 4.0
+            cbr_factor = min(cbr_factor, 5.0)      # Increased cap from 4.0
         
-        # ENHANCED: More aggressive neighbor impact
-        neighbor_multiplier = 1.0 + (neighbor_count * 0.12)  # Increased from 0.1
-        
-        effective_tx_prob = min(0.12, base_tx_prob * cbr_factor * neighbor_multiplier)  # Increased cap from 0.08
-        
-        # ENHANCED: More realistic collision probability calculation with neighbor density
-        if neighbor_count == 1:
-            collision_prob = effective_tx_prob * 0.8  # Single neighbor case
+        # ENHANCED: More aggressive neighbor impact with non-linear scaling
+        if neighbor_count <= 5:
+            neighbor_multiplier = 1.0 + (neighbor_count * 0.15)  # Increased from 0.12
+        elif neighbor_count <= 10:
+            neighbor_multiplier = 1.75 + ((neighbor_count - 5) * 0.2)  # More aggressive scaling
         else:
-            # Multiple neighbors - use enhanced collision model
-            collision_prob = 1.0 - (1.0 - effective_tx_prob)**(neighbor_count)  # All neighbors
+            neighbor_multiplier = 2.75 + ((neighbor_count - 10) * 0.25)  # Even more aggressive for high density
         
-        # ENHANCED: More aggressive hidden terminal probability with distance consideration
-        hidden_terminal_prob = min(0.025, neighbor_count * 0.0008)  # Increased from 0.015 and 0.0005
+        effective_tx_prob = min(0.15, base_tx_prob * cbr_factor * neighbor_multiplier)  # Increased cap
         
-        # ENHANCED: Additional collision sources for dense networks
-        if neighbor_count > 10:
-            density_collision_prob = min(0.02, (neighbor_count - 10) * 0.001)  # Additional collisions in dense areas
+        # ENHANCED: More realistic collision probability with neighbor density bonus
+        if neighbor_count == 1:
+            collision_prob = effective_tx_prob * 0.8
+        else:
+            collision_prob = 1.0 - (1.0 - effective_tx_prob)**(neighbor_count)
+        
+        # ENHANCED: More aggressive hidden terminal and density effects
+        hidden_terminal_prob = min(0.03, neighbor_count * 0.001)  # Increased
+        
+        # NEW: Additional neighbor density collision penalty
+        if neighbor_count > 8:
+            density_bonus = (neighbor_count - 8) * 0.002  # Additional 0.2% per neighbor above 8
+            density_collision_prob = min(0.03, density_bonus)
         else:
             density_collision_prob = 0
         
         total_collision_prob = collision_prob + hidden_terminal_prob + density_collision_prob
         
-        # ENHANCED: Higher collision probability cap for realistic VANET conditions
-        return min(0.45, total_collision_prob)  # Increased from 0.35
+        return min(0.5, total_collision_prob)  # Increased cap from 0.45
     
     def get_mac_efficiency(self, cbr: float, per: float, neighbor_count: int) -> float:
         """ENHANCED MAC efficiency with stronger neighbor impact modeling"""
@@ -6424,105 +6427,97 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         return total_duration
     
     def _calculate_cbr_realistic_dynamic(self, vehicle_id: str, neighbors: List[Dict]) -> float:
-        """FIXED CBR calculation with proper offered load separation and CBR bounding"""
+        """CBR calculation with enhanced neighbor sensitivity"""
         vehicle = self.vehicles[vehicle_id]
         num_neighbors = len(neighbors)
         
-        # Base CBR from safety beacon traffic with ACTUAL packet transmission time
-        base_background = 0.02  # Minimal base level
+        # Base CBR from safety beacon traffic
+        base_background = 0.02
         
         if num_neighbors == 0:
-            # Calculate CBR for own transmissions only
             actual_packet_duration = self._calculate_packet_transmission_time(
                 self.config.payload_length, vehicle.mcs)
             own_occupancy = vehicle.beacon_rate * actual_packet_duration
             base_cbr = base_background + own_occupancy
         else:
-            # Calculate channel occupancy from safety beacons with REAL packet sizes
+            # Calculate channel occupancy from safety beacons
             total_channel_time = 0.0
             
-            # Own beacon transmission time with ACTUAL packet size
+            # Own beacon transmission time
             own_packet_duration = self._calculate_packet_transmission_time(
                 self.config.payload_length, vehicle.mcs)
             own_occupancy = vehicle.beacon_rate * own_packet_duration
             total_channel_time += own_occupancy
             
-            # Neighbor beacon contributions with their actual packet sizes
+            # Neighbor beacon contributions
             for neighbor in neighbors:
                 neighbor_beacon_rate = neighbor.get('beacon_rate', 10.0)
                 neighbor_mcs = neighbor.get('mcs', 1)
                 distance = neighbor['distance']
                 
-                # Calculate neighbor's actual packet transmission time
                 neighbor_packet_duration = self._calculate_packet_transmission_time(
                     self.config.payload_length, neighbor_mcs)
                 
-                # FIXED: More realistic sensing probability based on distance
+                # ENHANCED: More aggressive sensing probability
                 if distance <= 100:
                     sensing_prob = 1.0
                 elif distance <= 200:
-                    sensing_prob = 0.9
+                    sensing_prob = 0.95  # Increased from 0.9
                 elif distance <= 300:
-                    sensing_prob = 0.7
+                    sensing_prob = 0.8   # Increased from 0.7
                 else:
-                    sensing_prob = 0.4
+                    sensing_prob = 0.5   # Increased from 0.4
                 
                 neighbor_occupancy = (neighbor_beacon_rate * neighbor_packet_duration * 
                                     sensing_prob)
                 total_channel_time += neighbor_occupancy
             
-            # FIXED: More realistic MAC overhead calculation
+            # ENHANCED: More aggressive MAC overhead calculation
             if num_neighbors <= 5:
                 mac_overhead = 1.1
+            elif num_neighbors <= 10:
+                mac_overhead = 1.15 + (num_neighbors - 5) * 0.03  # Increased from 0.02
             elif num_neighbors <= 15:
-                mac_overhead = 1.2 + (num_neighbors - 5) * 0.02
-            elif num_neighbors <= 25:
-                mac_overhead = 1.4 + (num_neighbors - 15) * 0.03
+                mac_overhead = 1.3 + (num_neighbors - 10) * 0.04  # Increased
             else:
-                mac_overhead = 1.7 + (num_neighbors - 25) * 0.02
+                mac_overhead = 1.5 + (num_neighbors - 15) * 0.05  # Increased
             
-            # FIXED: More conservative hidden terminal and interference factors
-            hidden_terminal_factor = 1.0 + self.config.hidden_node_factor * (num_neighbors ** 0.7)
-            inter_system_factor = 1.0 + self.config.inter_system_interference * 0.5  # Reduced impact
+            # ENHANCED: Slightly more aggressive factors
+            hidden_terminal_factor = 1.0 + self.config.hidden_node_factor * (num_neighbors ** 0.75)  # Increased from 0.7
+            inter_system_factor = 1.0 + self.config.inter_system_interference * 0.6  # Increased from 0.5
             
-            # Calculate RAW offered load (can exceed 1.0)
             raw_offered_load = (total_channel_time * mac_overhead * 
                                hidden_terminal_factor * inter_system_factor)
             
-            # FIXED: More conservative neighbor density scaling
-            if num_neighbors <= 10:
+            # ENHANCED: More aggressive neighbor density scaling
+            if num_neighbors <= 8:   # Reduced from 10
                 min_neighbor_cbr = 0.05
-            elif num_neighbors <= 20:
-                min_neighbor_cbr = 0.15
-            elif num_neighbors <= 30:
-                min_neighbor_cbr = 0.35
+            elif num_neighbors <= 15: # Reduced from 20
+                min_neighbor_cbr = 0.18  # Increased from 0.15
+            elif num_neighbors <= 25: # Reduced from 30
+                min_neighbor_cbr = 0.4   # Increased from 0.35
             else:
-                min_neighbor_cbr = 0.60
+                min_neighbor_cbr = 0.7   # Increased from 0.60
             
             base_cbr = base_background + max(min_neighbor_cbr, raw_offered_load)
         
-        # Add background traffic contribution with FIXED scaling
+        # Add background traffic contribution (unchanged)
         if hasattr(self, 'background_traffic_manager') and self.background_traffic_manager:
             offered_load_with_bg = self.background_traffic_manager.get_effective_cbr_contribution(vehicle_id, base_cbr)
         else:
-            # Fallback to simple background traffic modeling
-            background_factor = self.config.background_traffic_load * 0.2  # Reduced from 0.3
+            background_factor = self.config.background_traffic_load * 0.2
             offered_load_with_bg = base_cbr + background_factor
         
-        # Apply packet size scaling factor (more conservative)
+        # Apply scaling factors
         packet_size_factor = (self.config.payload_length + self.config.mac_header_bytes) / 400.0
-        packet_size_factor = max(0.7, min(2.0, packet_size_factor))  # Reduced from 3.0x max
+        packet_size_factor = max(0.7, min(2.0, packet_size_factor))
         offered_load_with_bg *= packet_size_factor
         
-        # Apply neighbor density scaling (more conservative)
         if num_neighbors > 0:
-            density_factor = 1.0 + (num_neighbors * 0.05)  # Reduced from 0.08
+            density_factor = 1.0 + (num_neighbors * 0.06)  # Increased from 0.05
             offered_load_with_bg *= density_factor
         
-        # Store both offered load and actual CBR for analysis
         vehicle.offered_load = max(base_background, offered_load_with_bg)
-        
-        # FIXED: Return actual CBR (bounded at 1.0) while storing offered load separately
         actual_cbr = min(1.0, offered_load_with_bg)
         
         return actual_cbr
@@ -6711,25 +6706,37 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         ber = self.ieee_mapper.get_ber_from_sinr(sinr_db, selected_mcs, self.config.enable_ldpc)
         ser = self.ieee_mapper.get_ser_from_ber(ber, selected_mcs)
         per_phy = self.ieee_mapper.get_per_from_ser(ser, packet_bits, selected_mcs, self.config.enable_ldpc)
-        
-        # ENHANCED: Stronger collision probability calculation
+    
+        # ENHANCED: More aggressive PER combination with stronger neighbor impact
         collision_prob = self.ieee_mapper.get_cbr_collision_probability(cbr, num_neighbors)
         
-        # ENHANCED: More realistic PER combination with neighbor impact
-        # Use proper probability combination: P(A ∪ B) = P(A) + P(B) - P(A ∩ B)
-        # But for independent events in wireless: P(total_error) ≈ P(A) + P(B) - P(A) * P(B)
+        # Base PER combination
         per_total = per_phy + collision_prob - (per_phy * collision_prob)
         
-        # ENHANCED: Additional PER contribution from neighbor interference
+        # ENHANCED: Stronger neighbor density penalty on PER (increased impact)
         if num_neighbors > 0:
-            # Neighbor density penalty on PER
-            neighbor_per_penalty = min(0.05, num_neighbors * 0.003)  # Up to 5% additional PER
+            if num_neighbors <= 5:
+                neighbor_per_penalty = num_neighbors * 0.002  # 0.2% per neighbor
+            elif num_neighbors <= 10:
+                neighbor_per_penalty = 0.01 + ((num_neighbors - 5) * 0.003)  # 0.3% per neighbor above 5
+            elif num_neighbors <= 15:
+                neighbor_per_penalty = 0.025 + ((num_neighbors - 10) * 0.004)  # 0.4% per neighbor above 10
+            else:
+                neighbor_per_penalty = 0.045 + ((num_neighbors - 15) * 0.005)  # 0.5% per neighbor above 15
+            
+            neighbor_per_penalty = min(0.08, neighbor_per_penalty)  # Cap at 8%
             per_total = per_total + neighbor_per_penalty - (per_total * neighbor_per_penalty)
         
-        # ENHANCED: CBR impact on PER (high CBR = more collisions/errors)
-        if cbr > 0.6:
-            cbr_per_penalty = (cbr - 0.6) * 0.1  # Up to 4% additional PER at CBR=1.0
+        # ENHANCED: Stronger CBR impact on PER
+        if cbr > 0.5:  # Lower threshold from 0.6
+            cbr_per_penalty = (cbr - 0.5) * 0.12  # Increased from 0.1
             per_total = per_total + cbr_per_penalty - (per_total * cbr_per_penalty)
+        
+        # NEW: Additional interference penalty for very dense networks
+        if num_neighbors > 12:
+            interference_penalty = (num_neighbors - 12) * 0.003  # 0.3% per neighbor above 12
+            interference_penalty = min(0.05, interference_penalty)  # Cap at 5%
+            per_total = per_total + interference_penalty - (per_total * interference_penalty)
         
         per_total = min(0.999, max(1e-10, per_total))
         
