@@ -66,7 +66,7 @@ except ImportError:
 # ===============================================================================
 
 # FILE AND OUTPUT CONFIGURATION
-FCD_FILE = "fcd-output-250m-23-vehicle-10000second.xml"  # Path to your FCD XML file
+FCD_FILE = "fcd_training_data.xml"  # Path to your FCD XML file
 OUTPUT_FILENAME = "Training-Hybrid-dual-SAC-45cars-500seconds-omnidirectional-L3.xlsx"  # Set to None for automatic naming, or specify custom name
 
 # FCD DATA RELOADING CONFIGURATION
@@ -79,12 +79,12 @@ CSV_UPDATE_FREQUENCY = 1  # Write CSV every N timestamps
 EXCEL_UPDATE_FREQUENCY = 1  # Update Excel file every N timestamps
 
 # RL INTEGRATION CONFIGURATION
-ENABLE_RL = False  # Set to True to enable RL optimization
+ENABLE_RL = True  # Set to True to enable RL optimization
 RL_HOST = '127.0.0.1'  # RL server host address
 RL_PORT = 5012  # RL server port
 
 # NEW: LAYER 3 NETWORKING CONFIGURATION
-ENABLE_LAYER3 = True  # Enable Layer 3 networking stack
+ENABLE_LAYER3 = False  # Enable Layer 3 networking stack
 ROUTING_PROTOCOL = "HYBRID"  # Options: "AODV", "OLSR", "GEOGRAPHIC", "HYBRID"
 ENABLE_MULTI_HOP = True  # Enable multi-hop communication
 MAX_HOP_COUNT = 5  # Maximum number of hops for route discovery
@@ -376,19 +376,38 @@ DISTANCE_MATRIX_CHUNK_SIZE = 2000  # Chunk size for distance matrix calculation
 
 # Adaptive batch sizing based on available resources
 def get_optimal_batch_size():
-    """Calculate optimal batch size based on available resources"""
+    """Calculate optimal batch size based on available resources with safety checks"""
+    min_batch_size = 100  # Absolute minimum
+    default_batch_size = 1000  # Safe default
+    
     if GPU_AVAILABLE:
         try:
             # Get GPU memory info
             mempool = cp.get_default_memory_pool()
-            gpu_mem_gb = mempool.total_bytes() / (1024**3) if mempool.total_bytes() > 0 else 2.0
-            return min(int(gpu_mem_gb * BATCH_SIZE_PER_GPU_GB), 5000)
-        except:
-            pass
+            total_bytes = mempool.total_bytes()
+            
+            if total_bytes > 0:
+                gpu_mem_gb = total_bytes / (1024**3)
+                calculated_size = int(gpu_mem_gb * BATCH_SIZE_PER_GPU_GB)
+                return max(min_batch_size, min(calculated_size, 5000))
+            else:
+                print("[PARALLEL WARNING] GPU memory pool reports 0 bytes, using default batch size")
+                return default_batch_size
+        except Exception as e:
+            print(f"[PARALLEL WARNING] GPU batch size calculation failed: {e}")
     
     # CPU fallback - based on available RAM
-    available_ram_gb = psutil.virtual_memory().available / (1024**3)
-    return min(int(available_ram_gb * 500), 3000)  # 500 vehicles per GB of RAM
+    try:
+        available_ram_gb = psutil.virtual_memory().available / (1024**3)
+        if available_ram_gb > 0:
+            calculated_size = int(available_ram_gb * 500)  # 500 vehicles per GB of RAM
+            return max(min_batch_size, min(calculated_size, 3000))
+        else:
+            print("[PARALLEL WARNING] Available RAM reports 0 GB, using default batch size")
+            return default_batch_size
+    except Exception as e:
+        print(f"[PARALLEL WARNING] CPU batch size calculation failed: {e}")
+        return default_batch_size
 
 class ParallelComputationManager:
     """Manages parallel computation with GPU/CPU/Serial fallbacks"""
@@ -396,8 +415,20 @@ class ParallelComputationManager:
     def __init__(self, config):
         self.config = config
         self.computation_mode = 'serial'
-        self.optimal_batch_size = get_optimal_batch_size()
-        self.cpu_cores = int(mp.cpu_count() * CPU_CORE_RATIO)
+        
+        # FIXED: Safe batch size initialization
+        try:
+            self.optimal_batch_size = get_optimal_batch_size()
+        except Exception as e:
+            print(f"[PARALLEL WARNING] Batch size calculation failed: {e}")
+            self.optimal_batch_size = 1000  # Safe fallback
+        
+        # Ensure minimum batch size
+        if self.optimal_batch_size <= 0:
+            print(f"[PARALLEL ERROR] Invalid batch size {self.optimal_batch_size}, using default")
+            self.optimal_batch_size = 1000
+        
+        self.cpu_cores = max(1, int(mp.cpu_count() * CPU_CORE_RATIO))  # Ensure at least 1
         self.gpu_available = GPU_AVAILABLE
         self.performance_history = {'gpu': [], 'cpu': [], 'serial': []}
         
@@ -5754,14 +5785,29 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     f"Static({static_sectors} at {SIDE_ANTENNA_STATIC_POWER}dBm)")
         
     def _initialize_parallel_processing(self):
-        """Initialize parallel processing components with proper stats structure"""
+        """Initialize parallel processing components with proper stats structure and safety checks"""
         if ENABLE_PARALLEL_PROCESSING:
-            self.parallel_manager = ParallelComputationManager(self.config)
-            self.parallel_neighbor_finder = ParallelNeighborFinder(
-                self.parallel_manager, 
-                self.interference_calculator
-            )
-            print(f"[PARALLEL] Parallel processing initialized in {self.parallel_manager.get_computation_mode()} mode")
+            try:
+                self.parallel_manager = ParallelComputationManager(self.config)
+                
+                # SAFETY CHECK: Ensure valid batch size after initialization
+                if (not hasattr(self.parallel_manager, 'optimal_batch_size') or 
+                    self.parallel_manager.optimal_batch_size <= 0):
+                    print("[PARALLEL ERROR] Invalid batch size after initialization, fixing...")
+                    self.parallel_manager.optimal_batch_size = 1000
+                
+                self.parallel_neighbor_finder = ParallelNeighborFinder(
+                    self.parallel_manager, 
+                    self.interference_calculator
+                )
+                print(f"[PARALLEL] Parallel processing initialized in {self.parallel_manager.get_computation_mode()} mode")
+                print(f"[PARALLEL] Verified batch size: {self.parallel_manager.optimal_batch_size}")
+                
+            except Exception as e:
+                print(f"[PARALLEL ERROR] Failed to initialize parallel processing: {e}")
+                self.parallel_manager = None
+                self.parallel_neighbor_finder = None
+                print("[PARALLEL] Falling back to serial processing")
         else:
             self.parallel_manager = None
             self.parallel_neighbor_finder = None
@@ -5782,7 +5828,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
             'mode_switches': []
         }
         
-        print(f"[PARALLEL] Performance monitoring initialized")
+        print(f"[PARALLEL] Performance monitoring initialized safely")
 
     def create_vehicle_batch_from_current_vehicles(self, current_vehicles, current_time):
         """Create a batch of vehicle data for parallel processing"""
@@ -9506,7 +9552,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         return result
     
     def _monitor_gpu_memory(self):
-        """Enhanced GPU memory monitoring with adaptive cleanup"""
+        """Enhanced GPU memory monitoring with adaptive cleanup and safe batch size adjustment"""
         if GPU_AVAILABLE and self.parallel_manager and self.parallel_manager.get_computation_mode() == 'gpu':
             try:
                 mempool = cp.get_default_memory_pool()
@@ -9522,9 +9568,14 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                         import gc
                         gc.collect()
                         cp.get_default_memory_pool().free_all_blocks()
-                        # Reduce batch size temporarily
+                        
+                        # FIXED: Safe batch size reduction
                         if hasattr(self.parallel_manager, 'optimal_batch_size'):
-                            self.parallel_manager.optimal_batch_size = max(500, self.parallel_manager.optimal_batch_size * 0.8)
+                            current_size = self.parallel_manager.optimal_batch_size
+                            new_size = max(100, int(current_size * 0.8))  # Ensure minimum 100
+                            self.parallel_manager.optimal_batch_size = new_size
+                            print(f"[GPU MEMORY] Reduced batch size: {current_size} → {new_size}")
+                            
                     elif usage_percent > 80:
                         print(f"[GPU MEMORY WARNING] {usage_percent:.1f}% - standard cleanup")
                         cp.get_default_memory_pool().free_all_blocks()
@@ -9546,39 +9597,61 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                         # Keep only recent history
                         if len(self.parallel_performance_stats['gpu_memory_history']) > 100:
                             self.parallel_performance_stats['gpu_memory_history'] = self.parallel_performance_stats['gpu_memory_history'][-100:]
+                else:
+                    print("[GPU MEMORY WARNING] GPU memory reports 0 bytes")
                             
             except Exception as e:
-                print(f"[GPU MEMORY] Enhanced monitoring failed: {e}")
+                print(f"[GPU MEMORY ERROR] Enhanced monitoring failed: {e}")
+            
     def optimize_batch_size(self, vehicle_count: int, processing_time: float):
-        """Dynamically optimize batch size based on performance"""
+        """Dynamically optimize batch size based on performance with safety checks"""
         if not hasattr(self, 'parallel_manager') or not self.parallel_manager:
             return
         
-        current_batch_size = self.parallel_manager.optimal_batch_size
-        vehicles_per_second = vehicle_count / max(processing_time, 0.001)
-        
-        # Performance-based batch size adjustment
-        if vehicle_count >= current_batch_size:  # Batch was full
-            if vehicles_per_second > 1000:  # Very good performance
-                # Increase batch size for better efficiency
-                new_batch_size = min(current_batch_size * 1.2, 5000)
-            elif vehicles_per_second < 200:  # Poor performance
-                # Decrease batch size to reduce memory pressure
-                new_batch_size = max(current_batch_size * 0.8, 500)
+        try:
+            current_batch_size = getattr(self.parallel_manager, 'optimal_batch_size', 1000)
+            
+            # Ensure current batch size is valid
+            if current_batch_size <= 0:
+                print(f"[BATCH OPTIMIZATION ERROR] Invalid current batch size {current_batch_size}, resetting")
+                self.parallel_manager.optimal_batch_size = 1000
+                return
+            
+            vehicles_per_second = vehicle_count / max(processing_time, 0.001)  # Prevent division by zero
+            
+            # Performance-based batch size adjustment
+            if vehicle_count >= current_batch_size:  # Batch was full
+                if vehicles_per_second > 1000:  # Very good performance
+                    # Increase batch size for better efficiency
+                    new_batch_size = min(current_batch_size * 1.2, 5000)
+                elif vehicles_per_second < 200:  # Poor performance
+                    # Decrease batch size to reduce memory pressure
+                    new_batch_size = max(current_batch_size * 0.8, 100)  # Minimum 100
+                else:
+                    new_batch_size = current_batch_size  # Keep current size
             else:
-                new_batch_size = current_batch_size  # Keep current size
-        else:
-            new_batch_size = current_batch_size  # Don't adjust for partial batches
+                new_batch_size = current_batch_size  # Don't adjust for partial batches
+            
+            # Ensure new batch size is valid
+            new_batch_size = max(100, min(new_batch_size, 10000))  # Bounds: 100-10000
+            
+            # Update batch size if significantly different
+            if abs(new_batch_size - current_batch_size) / current_batch_size > 0.1:  # 10% threshold
+                self.parallel_manager.optimal_batch_size = int(new_batch_size)
+                print(f"[BATCH OPTIMIZATION] Adjusted batch size: {current_batch_size} → {int(new_batch_size)}")
         
-        # Update batch size if significantly different
-        if abs(new_batch_size - current_batch_size) / current_batch_size > 0.1:  # 10% threshold
-            self.parallel_manager.optimal_batch_size = int(new_batch_size)
-            print(f"[BATCH OPTIMIZATION] Adjusted batch size: {current_batch_size} → {int(new_batch_size)}")
+        except Exception as e:
+            print(f"[BATCH OPTIMIZATION ERROR] Failed to optimize batch size: {e}")
+            # Ensure we have a valid batch size
+            if hasattr(self, 'parallel_manager') and self.parallel_manager:
+                if not hasattr(self.parallel_manager, 'optimal_batch_size') or self.parallel_manager.optimal_batch_size <= 0:
+                    self.parallel_manager.optimal_batch_size = 1000
+                    print("[BATCH OPTIMIZATION] Reset to safe default batch size: 1000")
             
     def monitor_parallel_performance(self, start_time, end_time, vehicle_count, mode):
-        """Monitor and log parallel processing performance with detailed metrics"""
+        """Monitor and log parallel processing performance with detailed metrics and safety checks"""
         processing_time = end_time - start_time
-        vehicles_per_second = vehicle_count / max(processing_time, 0.001)
+        vehicles_per_second = vehicle_count / max(processing_time, 0.001)  # Prevent division by zero
         
         # Ensure parallel_performance_stats exists and has all required keys
         if not hasattr(self, 'parallel_performance_stats'):
@@ -9609,6 +9682,20 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                 else:
                     self.parallel_performance_stats[key] = []
         
+        # FIXED: Safe batch utilization calculation
+        batch_utilization = 1.0  # Default safe value
+        if hasattr(self, 'parallel_manager') and self.parallel_manager:
+            try:
+                optimal_batch_size = getattr(self.parallel_manager, 'optimal_batch_size', 1000)
+                if optimal_batch_size > 0:  # Prevent division by zero
+                    batch_utilization = vehicle_count / optimal_batch_size
+                else:
+                    print(f"[PARALLEL WARNING] Invalid batch size {optimal_batch_size}, using default utilization")
+                    batch_utilization = 1.0
+            except Exception as e:
+                print(f"[PARALLEL WARNING] Batch utilization calculation failed: {e}")
+                batch_utilization = 1.0
+        
         # Store detailed performance data
         perf_record = {
             'timestamp': time.time(),
@@ -9616,7 +9703,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
             'vehicle_count': vehicle_count,
             'throughput': vehicles_per_second,
             'efficiency_score': vehicle_count / max(processing_time * 1000, 1),  # vehicles per ms
-            'batch_utilization': vehicle_count / getattr(self.parallel_manager, 'optimal_batch_size', 1000) if hasattr(self, 'parallel_manager') and self.parallel_manager else 1.0
+            'batch_utilization': batch_utilization  # Now safe from division by zero
         }
         
         # Validate mode exists in stats
