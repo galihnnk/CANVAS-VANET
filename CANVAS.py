@@ -40,8 +40,8 @@ from dataclasses import dataclass, field
 # ===============================================================================
 
 # FILE AND OUTPUT CONFIGURATION
-FCD_FILE = "fcd-output-250m-45-vehicle-500second.xml"  # Path to your FCD XML file
-OUTPUT_FILENAME = "Baseline-45cars-500seconds-omnidirectional-L3.xlsx"  # Set to None for automatic naming, or specify custom name
+FCD_FILE = "fcd_training_data.xml"  # Path to your FCD XML file
+OUTPUT_FILENAME = "Baseline-trainingdata-omnidirectional-L3.xlsx"  # Set to None for automatic naming, or specify custom name
 
 # FCD DATA RELOADING CONFIGURATION
 FCD_RELOAD_COUNT = 1  # Number of times to reload FCD data
@@ -148,20 +148,19 @@ ANTENNA_TYPE = "OMNIDIRECTIONAL"  # Options: "OMNIDIRECTIONAL", "SECTORAL"
 # RL-controlled vs static sectors for sectoral antennas
 RL_CONTROLLED_SECTORS = ['front', 'rear']  # Only these will be adjusted by RL
 RL_STATIC_SECTORS = ['left', 'right']     # These remain static
-SIDE_ANTENNA_STATIC_POWER = 3.0          # Static power for side antennas (dBm)
+SIDE_ANTENNA_STATIC_POWER = 5.0          # Static power for side antennas (dBm) - INCREASED from 3.0
 
-# Updated Sectoral antenna configuration with static side powers
+# FAIR STATIC BASELINE
 SECTORAL_ANTENNA_CONFIG = {
-    "front": {"power_dbm": 12.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},  # Narrower beam = higher gain
-    "rear": {"power_dbm": 8.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},
-    "left": {"power_dbm": SIDE_ANTENNA_STATIC_POWER, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": False},
-    "right": {"power_dbm": SIDE_ANTENNA_STATIC_POWER, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": False}
+    "front": {"power_dbm": 15.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},  # 23.0 dBm EIRP
+    "rear": {"power_dbm": 15.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},   # 23.0 dBm EIRP  
+    "left": {"power_dbm": 5.0, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": True},    # 10.0 dBm EIRP
+    "right": {"power_dbm": 5.0, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": True}    # 10.0 dBm EIRP
 }
 
-# OMNIDIRECTIONAL ANTENNA CONFIGURATION
 OMNIDIRECTIONAL_ANTENNA_CONFIG = {
-    "power_dbm": 20.0,
-    "gain_db": 2.15
+    "power_dbm": 20.0,    # 23 dBm EIRP uniform
+    "gain_db": 3
 }
 
 # ENHANCED VISUALIZATION CONFIGURATION
@@ -1130,8 +1129,8 @@ class SectoralAntennaSystem:
                 self.sector_powers[sector] = rl_power
         else:
             # Distribute based on neighbor density in RL-controlled sectors only
-            min_power = max(10.0, rl_power - 5.0)  # Minimum power per sector
-            max_power = min(33.0, rl_power + 5.0)  # Maximum power per sector
+            min_power = max(1.0, rl_power - 5.0)  # Minimum power per sector
+            max_power = min(30.0, rl_power + 5.0)  # Maximum power per sector
             
             for sector in RL_CONTROLLED_SECTORS:
                 count = self.rl_controlled_neighbor_distribution.get(sector, 0)
@@ -2036,76 +2035,113 @@ class IEEE80211bdMapper:
         return per
     
     def get_cbr_collision_probability(self, cbr: float, neighbor_count: int, beacon_rate: float = 10.0) -> float:
-        """FIXED: Collision probability with proper IEEE 802.11bd modeling and CBR bounding"""
+        """ENHANCED collision probability with slightly more aggressive neighbor impact"""
         if neighbor_count == 0:
-            return 0.0005
+            return 0.001
         
-        slot_time = 9e-6  # IEEE 802.11bd correct value
+        slot_time = 9e-6
         beacon_interval = 1.0 / beacon_rate
         slots_per_beacon = beacon_interval / slot_time
         base_tx_prob = 1.0 / slots_per_beacon
         
-        # FIXED: More realistic CBR impact with smoother transitions
+        # ENHANCED: More aggressive CBR impact
         if cbr <= 0.2:
             cbr_factor = 1.0
         elif cbr <= 0.4:
-            cbr_factor = 1.15  # Reduced from 1.3
+            cbr_factor = 1.3   # Increased from 1.25
         elif cbr <= 0.6:
-            cbr_factor = 1.4   # Reduced from 1.8
+            cbr_factor = 1.8   # Increased from 1.6
         elif cbr <= 0.8:
-            cbr_factor = 1.8   # Reduced from 2.5
+            cbr_factor = 2.5   # Increased from 2.2
         else:
-            # For CBR approaching 1.0, collision probability should be high but not extreme
-            cbr_factor = 2.5   # Cap the factor
+            excess_cbr = cbr - 0.8
+            cbr_factor = 2.5 + (excess_cbr * 4.5)  # Increased from 4.0
+            cbr_factor = min(cbr_factor, 5.0)      # Increased cap from 4.0
         
-        effective_tx_prob = min(0.08, base_tx_prob * cbr_factor)  # Slightly increased cap from 0.06
+        # ENHANCED: More aggressive neighbor impact with non-linear scaling
+        if neighbor_count <= 5:
+            neighbor_multiplier = 1.0 + (neighbor_count * 0.15)  # Increased from 0.12
+        elif neighbor_count <= 10:
+            neighbor_multiplier = 1.75 + ((neighbor_count - 5) * 0.2)  # More aggressive scaling
+        else:
+            neighbor_multiplier = 2.75 + ((neighbor_count - 10) * 0.25)  # Even more aggressive for high density
         
-        # FIXED: More realistic collision probability calculation
-        collision_prob = 1.0 - (1.0 - effective_tx_prob)**(max(1, neighbor_count - 1))  # Changed from neighbor_count - 2
+        effective_tx_prob = min(0.15, base_tx_prob * cbr_factor * neighbor_multiplier)  # Increased cap
         
-        # FIXED: More conservative hidden terminal probability
-        hidden_terminal_prob = min(0.015, neighbor_count * 0.0005)  # Reduced from 0.02 and 0.0008
-        total_collision_prob = collision_prob + hidden_terminal_prob
+        # ENHANCED: More realistic collision probability with neighbor density bonus
+        if neighbor_count == 1:
+            collision_prob = effective_tx_prob * 0.8
+        else:
+            collision_prob = 1.0 - (1.0 - effective_tx_prob)**(neighbor_count)
         
-        # FIXED: More reasonable collision probability cap
-        return min(0.35, total_collision_prob)  # Reduced from 0.4
+        # ENHANCED: More aggressive hidden terminal and density effects
+        hidden_terminal_prob = min(0.03, neighbor_count * 0.001)  # Increased
+        
+        # NEW: Additional neighbor density collision penalty
+        if neighbor_count > 8:
+            density_bonus = (neighbor_count - 8) * 0.002  # Additional 0.2% per neighbor above 8
+            density_collision_prob = min(0.03, density_bonus)
+        else:
+            density_collision_prob = 0
+        
+        total_collision_prob = collision_prob + hidden_terminal_prob + density_collision_prob
+        
+        return min(0.5, total_collision_prob)  # Increased cap from 0.45
     
     def get_mac_efficiency(self, cbr: float, per: float, neighbor_count: int) -> float:
-        """FIXED MAC efficiency with proper IEEE 802.11bd parameters (from script 2)"""
+        """ENHANCED MAC efficiency with stronger neighbor impact modeling"""
         
-        # IEEE 802.11bd base efficiency is much higher than 802.11p
-        base_efficiency = 0.85
+        # IEEE 802.11bd base efficiency is higher than 802.11p but still affected by congestion
+        base_efficiency = 0.82  # Slightly reduced from 0.85 for more realistic modeling
         
-        # CBR impact is less severe than original calculation
+        # ENHANCED: More aggressive CBR impact with non-linear scaling
         if cbr <= 0.2:
             cbr_efficiency = base_efficiency
         elif cbr <= 0.4:
-            cbr_efficiency = base_efficiency * (1.0 - (cbr - 0.2) * 1.2)
+            cbr_efficiency = base_efficiency * (1.0 - (cbr - 0.2) * 1.5)  # Increased from 1.2
         elif cbr <= 0.6:
-            cbr_efficiency = base_efficiency * (1.0 - (cbr - 0.2) * 1.5)
+            cbr_efficiency = base_efficiency * (1.0 - (cbr - 0.2) * 1.8)  # Increased from 1.5
+        elif cbr <= 0.8:
+            cbr_efficiency = base_efficiency * (1.0 - (cbr - 0.2) * 2.2)  # Increased from 1.8
         else:
-            cbr_efficiency = base_efficiency * (1.0 - (cbr - 0.2) * 1.8)
+            # ENHANCED: Very aggressive efficiency loss at high CBR
+            excess_cbr = cbr - 0.8
+            efficiency_loss = (cbr - 0.2) * 2.2 + (excess_cbr * 3.0)  # Additional penalty for very high CBR
+            cbr_efficiency = base_efficiency * (1.0 - efficiency_loss)
         
-        cbr_efficiency = max(0.25, cbr_efficiency)
+        cbr_efficiency = max(0.15, cbr_efficiency)  # Reduced minimum from 0.25
         
-        # Neighbor penalty is much less severe in 802.11bd
+        # ENHANCED: More aggressive neighbor penalty with non-linear scaling
         if neighbor_count == 0:
             neighbor_penalty = 1.0
-        elif neighbor_count <= 10:
-            neighbor_penalty = 1.0 - 0.01 * neighbor_count
+        elif neighbor_count <= 5:
+            neighbor_penalty = 1.0 - 0.015 * neighbor_count  # Increased from 0.01
+        elif neighbor_count <= 15:
+            neighbor_penalty = 0.925 - 0.02 * (neighbor_count - 5)  # Increased from 0.015
         elif neighbor_count <= 25:
-            neighbor_penalty = 0.9 - 0.015 * (neighbor_count - 10)
+            neighbor_penalty = 0.725 - 0.025 * (neighbor_count - 15)  # Increased penalty
         else:
-            neighbor_penalty = 0.675 - 0.005 * min(15, neighbor_count - 25)
+            neighbor_penalty = 0.475 - 0.008 * min(20, neighbor_count - 25)  # More aggressive for very dense
         
-        neighbor_penalty = max(0.3, neighbor_penalty)
+        neighbor_penalty = max(0.15, neighbor_penalty)  # Reduced minimum from 0.3
         
-        # FIXED: Reduced overhead calculations
-        contention_overhead = 1.0 + (neighbor_count * 0.003)**1.1
-        retry_overhead = 1.0 + (per * neighbor_count * 0.02)
+        # ENHANCED: More realistic overhead calculations with stronger impact
+        contention_overhead = 1.0 + (neighbor_count * 0.004)**1.2  # Increased from 0.003
+        retry_overhead = 1.0 + (per * neighbor_count * 0.03)  # Increased from 0.02
         
-        final_efficiency = (cbr_efficiency * neighbor_penalty) / (contention_overhead * retry_overhead)
-        return max(0.25, min(0.85, final_efficiency))
+        # ENHANCED: Additional overhead for high neighbor density
+        if neighbor_count > 15:
+            density_overhead = 1.0 + ((neighbor_count - 15) * 0.02)  # Additional overhead
+        else:
+            density_overhead = 1.0
+        
+        # ENHANCED: PER impact on efficiency (higher PER = lower efficiency)
+        per_efficiency_impact = 1.0 - (per * 0.3)  # PER directly reduces efficiency
+        per_efficiency_impact = max(0.5, per_efficiency_impact)
+        
+        final_efficiency = (cbr_efficiency * neighbor_penalty * per_efficiency_impact) / (contention_overhead * retry_overhead * density_overhead)
+        
+        return max(0.15, min(0.82, final_efficiency))  # Adjusted bounds
 
 # AODV Routing Protocol Implementation
 class AODVRoutingProtocol:
@@ -4710,26 +4746,24 @@ class RealisticInterferenceCalculator:
         return final_range
     
     def calculate_sinr_with_interference(self, vehicle_id: str, neighbors: list, 
-                               vehicle_tx_power: float, channel_model: str,
-                               background_traffic_manager=None) -> float:
-        """FIXED SINR calculation with more realistic interference bounds"""
+                           vehicle_tx_power: float, channel_model: str,
+                           background_traffic_manager=None) -> float:
+        """ENHANCED SINR calculation with stronger neighbor interference modeling"""
         
         if not neighbors:
-            # No neighbors - use noise-limited scenario with background interference
+            # No neighbors - use noise-limited scenario
             reference_distance = 100  # meters
             signal_power_dbm = self.calculate_received_power_dbm(
                 vehicle_tx_power, reference_distance, self.config.g_t, self.config.g_r, channel_model
             )
             
-            # Add background traffic interference even without neighbors
             thermal_noise_power_mw = 10**((self.thermal_noise_power_dbm - 30) / 10.0)
             
             if background_traffic_manager:
                 background_interference_mw = background_traffic_manager.calculate_background_interference_contribution(
                     vehicle_id, [])
             else:
-                # Fallback background interference
-                background_interference_mw = thermal_noise_power_mw * self.config.background_traffic_load * 1.5  # Reduced from 2.0
+                background_interference_mw = thermal_noise_power_mw * self.config.background_traffic_load * 2.0
             
             total_noise_mw = thermal_noise_power_mw + background_interference_mw
             signal_power_mw = 10**((signal_power_dbm - 30) / 10.0)
@@ -4740,14 +4774,13 @@ class RealisticInterferenceCalculator:
             else:
                 snr_db = -10.0
             
-            # Only apply physical limits
             return max(-25, snr_db)
         
         # Use strongest signal as desired signal
         strongest_neighbor = max(neighbors, key=lambda n: n.get('rx_power_dbm', -150))
         signal_power_dbm = strongest_neighbor.get('rx_power_dbm', -100)
         
-        # Calculate interference from all other neighbors
+        # ENHANCED: Calculate interference from all other neighbors with stronger modeling
         total_interference_power_mw = 0
         thermal_noise_power_mw = 10**((self.thermal_noise_power_dbm - 30) / 10.0)
         
@@ -4755,7 +4788,7 @@ class RealisticInterferenceCalculator:
             if neighbor['id'] != strongest_neighbor['id']:
                 distance = neighbor['distance']
                 
-                if distance > 5 and distance < 2000:  # Realistic interference range
+                if distance > 3 and distance < 2500:  # Expanded interference range
                     intf_power_dbm = self.calculate_received_power_dbm(
                         neighbor['tx_power'], 
                         distance,
@@ -4764,78 +4797,85 @@ class RealisticInterferenceCalculator:
                         channel_model
                     )
                     
-                    # Only consider interference above noise floor
-                    if intf_power_dbm > self.thermal_noise_power_dbm + 8:  # Raised threshold from 10
+                    # ENHANCED: Lower threshold for interference consideration
+                    if intf_power_dbm > self.thermal_noise_power_dbm + 6:  # Reduced from 8
                         intf_power_mw = 10**((intf_power_dbm - 30) / 10.0)
                         
-                        # FIXED: More realistic activity factor
+                        # ENHANCED: Stronger activity factor based on realistic VANET behavior
                         beacon_rate = neighbor.get('beacon_rate', 10.0)
-                        packet_duration = 250e-6  # Reduced from 300 μs
+                        packet_duration = 300e-6  # 300 μs average packet duration
                         duty_cycle = beacon_rate * packet_duration
-                        activity_factor = min(0.4, duty_cycle)  # Reduced from 0.5
+                        activity_factor = min(0.6, duty_cycle * 1.2)  # Increased from 0.4
                         
-                        # FIXED: More conservative distance-based interference factor
+                        # ENHANCED: More aggressive distance-based interference
                         if distance <= 50:
-                            distance_factor = 0.8  # Reduced from 1.0
-                        elif distance <= 150:
-                            distance_factor = 0.5  # Reduced from 0.7
-                        elif distance <= 300:
-                            distance_factor = 0.25  # Reduced from 0.4
+                            distance_factor = 1.0    # Full interference at close range
+                        elif distance <= 100:
+                            distance_factor = 0.85   # Increased from 0.8
+                        elif distance <= 200:
+                            distance_factor = 0.65   # Increased from 0.5
+                        elif distance <= 400:
+                            distance_factor = 0.35   # Increased from 0.25
                         else:
-                            distance_factor = 0.1   # Reduced from 0.2
+                            distance_factor = 0.15   # Increased from 0.1
                         
-                        # FIXED: Improved capture effect
+                        # ENHANCED: More realistic capture effect (less forgiving)
                         signal_power_mw = 10**((signal_power_dbm - 30) / 10.0)
-                        if signal_power_mw > intf_power_mw * 15:  # Increased from 10 (stronger capture)
-                            capture_factor = 0.05  # Reduced from 0.1
-                        elif signal_power_mw > intf_power_mw * 5:  # Increased from 3
-                            capture_factor = 0.3   # Reduced from 0.5
+                        if signal_power_mw > intf_power_mw * 20:      # Increased threshold from 15
+                            capture_factor = 0.08   # Increased from 0.05
+                        elif signal_power_mw > intf_power_mw * 8:    # Increased from 5
+                            capture_factor = 0.4    # Increased from 0.3
                         else:
-                            capture_factor = 0.8   # Reduced from 1.0
+                            capture_factor = 0.9    # Increased from 0.8
                         
                         weighted_interference = (intf_power_mw * activity_factor * 
                                                distance_factor * capture_factor)
                         total_interference_power_mw += weighted_interference
         
-        # FIXED: More conservative background traffic interference
+        # ENHANCED: Background traffic interference with stronger impact
         if background_traffic_manager:
             background_interference_mw = background_traffic_manager.calculate_background_interference_contribution(
                 vehicle_id, neighbors)
-            # Reduce background interference impact
-            background_interference_mw *= 0.7  # NEW: 30% reduction
+            background_interference_mw *= 1.0  # No reduction - full impact
         else:
-            # Fallback background interference calculation
+            # ENHANCED: More aggressive fallback background interference
             background_load = self.config.background_traffic_load
-            # FIXED: More conservative management traffic interference
-            mgmt_interference = thermal_noise_power_mw * (background_load * 0.3) * 2.0  # Reduced from 3.0
-            # FIXED: More conservative infotainment traffic interference  
-            info_interference = thermal_noise_power_mw * (background_load * 0.4) * 2.5  # Reduced from 4.0
+            mgmt_interference = thermal_noise_power_mw * (background_load * 0.4) * 2.5  # Increased
+            info_interference = thermal_noise_power_mw * (background_load * 0.5) * 3.0  # Increased
             background_interference_mw = mgmt_interference + info_interference
         
-        # FIXED: More conservative other interference sources
-        hidden_node_factor = self.config.hidden_node_factor * 0.8  # NEW: 20% reduction
+        # ENHANCED: Stronger other interference sources
+        hidden_node_factor = self.config.hidden_node_factor * 1.0  # No reduction
         num_neighbors = len(neighbors)
-        hidden_node_interference_mw = thermal_noise_power_mw * hidden_node_factor * num_neighbors * 0.05  # Reduced from 0.1
+        hidden_node_interference_mw = thermal_noise_power_mw * hidden_node_factor * num_neighbors * 0.12  # Increased from 0.05
         
-        # FIXED: More conservative inter-system interference
+        # ENHANCED: More aggressive inter-system interference
         config = BACKGROUND_INTERFERENCE_CONFIG if 'BACKGROUND_INTERFERENCE_CONFIG' in globals() else {
-            "adjacent_channel_interference": 0.10,  # Reduced from 0.15
-            "co_channel_interference": 0.18,       # Reduced from 0.25
-            "non_vanet_interference": 0.07         # Reduced from 0.1
+            "adjacent_channel_interference": 0.15,  # Restored original values
+            "co_channel_interference": 0.25,       
+            "non_vanet_interference": 0.1         
         }
         
-        adjacent_channel_interference_mw = thermal_noise_power_mw * config["adjacent_channel_interference"] * 1.5  # Reduced from 2.0
-        co_channel_interference_mw = thermal_noise_power_mw * config["co_channel_interference"] * 1.2           # Reduced from 1.5
-        non_vanet_interference_mw = thermal_noise_power_mw * config["non_vanet_interference"] * 2.0             # Reduced from 3.0
+        adjacent_channel_interference_mw = thermal_noise_power_mw * config["adjacent_channel_interference"] * 2.0
+        co_channel_interference_mw = thermal_noise_power_mw * config["co_channel_interference"] * 1.5
+        non_vanet_interference_mw = thermal_noise_power_mw * config["non_vanet_interference"] * 3.0
         
-        # Total noise + interference
+        # ENHANCED: Additional neighbor density interference
+        if num_neighbors > 5:
+            density_interference_factor = 1.0 + ((num_neighbors - 5) * 0.02)  # 2% per neighbor above 5
+            density_interference_mw = thermal_noise_power_mw * density_interference_factor * 0.5
+        else:
+            density_interference_mw = 0
+        
+        # Total noise + interference with enhanced modeling
         total_noise_interference_mw = (thermal_noise_power_mw + 
                                       background_interference_mw + 
                                       total_interference_power_mw + 
                                       hidden_node_interference_mw +
                                       adjacent_channel_interference_mw +
                                       co_channel_interference_mw +
-                                      non_vanet_interference_mw)
+                                      non_vanet_interference_mw +
+                                      density_interference_mw)
         
         # Calculate SINR
         signal_power_mw = 10**((signal_power_dbm - 30) / 10.0)
@@ -4846,21 +4886,21 @@ class RealisticInterferenceCalculator:
         else:
             sinr_db = -20.0
         
-        # Channel-specific SINR adjustments (more conservative)
+        # ENHANCED: Channel-specific SINR adjustments (more aggressive)
         if 'nlos' in channel_model.lower():
-            sinr_db -= 2.0  # Reduced from 3.0 dB NLOS penalty
+            sinr_db -= 3.0  # Restored original 3.0 dB NLOS penalty
         
-        # FIXED: More conservative neighbor density penalty
-        if num_neighbors > 8:  # Raised threshold from 5
-            density_penalty = (num_neighbors - 8) * 0.3  # Reduced from 0.5 dB per neighbor
-            sinr_db -= min(density_penalty, 10.0)  # Reduced cap from 15 dB
+        # ENHANCED: More aggressive neighbor density penalty
+        if num_neighbors > 6:  # Lower threshold from 8
+            density_penalty = (num_neighbors - 6) * 0.4  # Increased from 0.3 dB per neighbor
+            sinr_db -= min(density_penalty, 12.0)  # Increased cap to 12 dB
         
-        # Only apply realistic physical bounds
-        min_sinr = -25.0  # Physical noise floor
+        # Physical bounds
+        min_sinr = -25.0
         sinr_db = max(min_sinr, sinr_db)
         
-        # FIXED: Smaller random variation
-        sinr_db += random.gauss(0, 0.3)  # Reduced from 0.5
+        # Small random variation
+        sinr_db += random.gauss(0, 0.4)  # Increased from 0.3
         
         return sinr_db
     
@@ -6386,105 +6426,97 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         return total_duration
     
     def _calculate_cbr_realistic_dynamic(self, vehicle_id: str, neighbors: List[Dict]) -> float:
-        """FIXED CBR calculation with proper offered load separation and CBR bounding"""
+        """CBR calculation with enhanced neighbor sensitivity"""
         vehicle = self.vehicles[vehicle_id]
         num_neighbors = len(neighbors)
         
-        # Base CBR from safety beacon traffic with ACTUAL packet transmission time
-        base_background = 0.02  # Minimal base level
+        # Base CBR from safety beacon traffic
+        base_background = 0.02
         
         if num_neighbors == 0:
-            # Calculate CBR for own transmissions only
             actual_packet_duration = self._calculate_packet_transmission_time(
                 self.config.payload_length, vehicle.mcs)
             own_occupancy = vehicle.beacon_rate * actual_packet_duration
             base_cbr = base_background + own_occupancy
         else:
-            # Calculate channel occupancy from safety beacons with REAL packet sizes
+            # Calculate channel occupancy from safety beacons
             total_channel_time = 0.0
             
-            # Own beacon transmission time with ACTUAL packet size
+            # Own beacon transmission time
             own_packet_duration = self._calculate_packet_transmission_time(
                 self.config.payload_length, vehicle.mcs)
             own_occupancy = vehicle.beacon_rate * own_packet_duration
             total_channel_time += own_occupancy
             
-            # Neighbor beacon contributions with their actual packet sizes
+            # Neighbor beacon contributions
             for neighbor in neighbors:
                 neighbor_beacon_rate = neighbor.get('beacon_rate', 10.0)
                 neighbor_mcs = neighbor.get('mcs', 1)
                 distance = neighbor['distance']
                 
-                # Calculate neighbor's actual packet transmission time
                 neighbor_packet_duration = self._calculate_packet_transmission_time(
                     self.config.payload_length, neighbor_mcs)
                 
-                # FIXED: More realistic sensing probability based on distance
+                # ENHANCED: More aggressive sensing probability
                 if distance <= 100:
                     sensing_prob = 1.0
                 elif distance <= 200:
-                    sensing_prob = 0.9
+                    sensing_prob = 0.95  # Increased from 0.9
                 elif distance <= 300:
-                    sensing_prob = 0.7
+                    sensing_prob = 0.8   # Increased from 0.7
                 else:
-                    sensing_prob = 0.4
+                    sensing_prob = 0.5   # Increased from 0.4
                 
                 neighbor_occupancy = (neighbor_beacon_rate * neighbor_packet_duration * 
                                     sensing_prob)
                 total_channel_time += neighbor_occupancy
             
-            # FIXED: More realistic MAC overhead calculation
+            # ENHANCED: More aggressive MAC overhead calculation
             if num_neighbors <= 5:
                 mac_overhead = 1.1
+            elif num_neighbors <= 10:
+                mac_overhead = 1.15 + (num_neighbors - 5) * 0.03  # Increased from 0.02
             elif num_neighbors <= 15:
-                mac_overhead = 1.2 + (num_neighbors - 5) * 0.02
-            elif num_neighbors <= 25:
-                mac_overhead = 1.4 + (num_neighbors - 15) * 0.03
+                mac_overhead = 1.3 + (num_neighbors - 10) * 0.04  # Increased
             else:
-                mac_overhead = 1.7 + (num_neighbors - 25) * 0.02
+                mac_overhead = 1.5 + (num_neighbors - 15) * 0.05  # Increased
             
-            # FIXED: More conservative hidden terminal and interference factors
-            hidden_terminal_factor = 1.0 + self.config.hidden_node_factor * (num_neighbors ** 0.7)
-            inter_system_factor = 1.0 + self.config.inter_system_interference * 0.5  # Reduced impact
+            # ENHANCED: Slightly more aggressive factors
+            hidden_terminal_factor = 1.0 + self.config.hidden_node_factor * (num_neighbors ** 0.75)  # Increased from 0.7
+            inter_system_factor = 1.0 + self.config.inter_system_interference * 0.6  # Increased from 0.5
             
-            # Calculate RAW offered load (can exceed 1.0)
             raw_offered_load = (total_channel_time * mac_overhead * 
                                hidden_terminal_factor * inter_system_factor)
             
-            # FIXED: More conservative neighbor density scaling
-            if num_neighbors <= 10:
+            # ENHANCED: More aggressive neighbor density scaling
+            if num_neighbors <= 8:   # Reduced from 10
                 min_neighbor_cbr = 0.05
-            elif num_neighbors <= 20:
-                min_neighbor_cbr = 0.15
-            elif num_neighbors <= 30:
-                min_neighbor_cbr = 0.35
+            elif num_neighbors <= 15: # Reduced from 20
+                min_neighbor_cbr = 0.18  # Increased from 0.15
+            elif num_neighbors <= 25: # Reduced from 30
+                min_neighbor_cbr = 0.4   # Increased from 0.35
             else:
-                min_neighbor_cbr = 0.60
+                min_neighbor_cbr = 0.7   # Increased from 0.60
             
             base_cbr = base_background + max(min_neighbor_cbr, raw_offered_load)
         
-        # Add background traffic contribution with FIXED scaling
+        # Add background traffic contribution (unchanged)
         if hasattr(self, 'background_traffic_manager') and self.background_traffic_manager:
             offered_load_with_bg = self.background_traffic_manager.get_effective_cbr_contribution(vehicle_id, base_cbr)
         else:
-            # Fallback to simple background traffic modeling
-            background_factor = self.config.background_traffic_load * 0.2  # Reduced from 0.3
+            background_factor = self.config.background_traffic_load * 0.2
             offered_load_with_bg = base_cbr + background_factor
         
-        # Apply packet size scaling factor (more conservative)
+        # Apply scaling factors
         packet_size_factor = (self.config.payload_length + self.config.mac_header_bytes) / 400.0
-        packet_size_factor = max(0.7, min(2.0, packet_size_factor))  # Reduced from 3.0x max
+        packet_size_factor = max(0.7, min(2.0, packet_size_factor))
         offered_load_with_bg *= packet_size_factor
         
-        # Apply neighbor density scaling (more conservative)
         if num_neighbors > 0:
-            density_factor = 1.0 + (num_neighbors * 0.05)  # Reduced from 0.08
+            density_factor = 1.0 + (num_neighbors * 0.06)  # Increased from 0.05
             offered_load_with_bg *= density_factor
         
-        # Store both offered load and actual CBR for analysis
         vehicle.offered_load = max(base_background, offered_load_with_bg)
-        
-        # FIXED: Return actual CBR (bounded at 1.0) while storing offered load separately
         actual_cbr = min(1.0, offered_load_with_bg)
         
         return actual_cbr
@@ -6645,45 +6677,72 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         }
     
     def _calculate_performance_metrics_rl_aware(self, vehicle_id: str, sinr_db: float, cbr: float, 
-                     neighbors: List[Dict], channel_model: str = 'highway_los') -> Dict:
-        """FIXED: RL-aware performance metrics that don't override RL-set MCS"""
+                 neighbors: List[Dict], channel_model: str = 'highway_los') -> Dict:
+        """ENHANCED RL-aware performance metrics with stronger neighbor impact modeling"""
         
         vehicle = self.vehicles[vehicle_id]
         num_neighbors = len(neighbors)
         
-        # FIXED: Only calculate MCS if RL is disabled, otherwise use RL-set value
+        # MCS selection (only if RL is disabled)
         if not self.enable_rl:
-            # MCS selection for range 0-9 with smoother transitions
             selected_mcs = 0
             for test_mcs in range(9, -1, -1):
                 threshold = self.ieee_mapper.snr_thresholds[test_mcs]['success']
                 if sinr_db >= threshold - 0.5:
                     selected_mcs = test_mcs
                     break
-            # Only update vehicle MCS in non-RL mode
             vehicle.mcs = selected_mcs
         else:
-            # RL mode: Keep the RL-set MCS value, just use it for calculations
             selected_mcs = vehicle.mcs
         
-        # FIXED: Less harsh failure conditions - use marginal performance instead of complete failure
-        if sinr_db < self.ieee_mapper.snr_thresholds[0]['success'] - 8.0:  # Changed from 5.0 to 8.0
+        # ENHANCED: More realistic failure conditions
+        if sinr_db < self.ieee_mapper.snr_thresholds[0]['success'] - 6.0:  # Reduced from 8.0
             return self._get_failure_metrics()
         
-        # Calculate performance metrics using corrected methods
+        # Calculate performance metrics
         packet_bits = (self.config.payload_length + self.config.mac_header_bytes) * 8
         
         ber = self.ieee_mapper.get_ber_from_sinr(sinr_db, selected_mcs, self.config.enable_ldpc)
         ser = self.ieee_mapper.get_ser_from_ber(ber, selected_mcs)
         per_phy = self.ieee_mapper.get_per_from_ser(ser, packet_bits, selected_mcs, self.config.enable_ldpc)
-        
+    
+        # ENHANCED: More aggressive PER combination with stronger neighbor impact
         collision_prob = self.ieee_mapper.get_cbr_collision_probability(cbr, num_neighbors)
+        
+        # Base PER combination
         per_total = per_phy + collision_prob - (per_phy * collision_prob)
+        
+        # ENHANCED: Stronger neighbor density penalty on PER (increased impact)
+        if num_neighbors > 0:
+            if num_neighbors <= 5:
+                neighbor_per_penalty = num_neighbors * 0.002  # 0.2% per neighbor
+            elif num_neighbors <= 10:
+                neighbor_per_penalty = 0.01 + ((num_neighbors - 5) * 0.003)  # 0.3% per neighbor above 5
+            elif num_neighbors <= 15:
+                neighbor_per_penalty = 0.025 + ((num_neighbors - 10) * 0.004)  # 0.4% per neighbor above 10
+            else:
+                neighbor_per_penalty = 0.045 + ((num_neighbors - 15) * 0.005)  # 0.5% per neighbor above 15
+            
+            neighbor_per_penalty = min(0.08, neighbor_per_penalty)  # Cap at 8%
+            per_total = per_total + neighbor_per_penalty - (per_total * neighbor_per_penalty)
+        
+        # ENHANCED: Stronger CBR impact on PER
+        if cbr > 0.5:  # Lower threshold from 0.6
+            cbr_per_penalty = (cbr - 0.5) * 0.12  # Increased from 0.1
+            per_total = per_total + cbr_per_penalty - (per_total * cbr_per_penalty)
+        
+        # NEW: Additional interference penalty for very dense networks
+        if num_neighbors > 12:
+            interference_penalty = (num_neighbors - 12) * 0.003  # 0.3% per neighbor above 12
+            interference_penalty = min(0.05, interference_penalty)  # Cap at 5%
+            per_total = per_total + interference_penalty - (per_total * interference_penalty)
+        
         per_total = min(0.999, max(1e-10, per_total))
         
+        # ENHANCED: MAC efficiency with stronger neighbor impact
         mac_efficiency = self.ieee_mapper.get_mac_efficiency(cbr, per_total, num_neighbors)
         
-        # PHY throughput calculation (enhanced)
+        # PHY throughput calculation
         data_rate_mbps = self.ieee_mapper.data_rates.get(selected_mcs, 3.0)
         data_rate_bps = data_rate_mbps * 1e6
         frame_efficiency = self.ieee_mapper.max_frame_efficiency.get(selected_mcs, 0.8)
@@ -6697,28 +6756,33 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         phy_throughput = data_rate_bps * frame_efficiency * (1 - per_phy) * enhancement_factor
         final_throughput = phy_throughput * mac_efficiency
         
+        # ENHANCED: Throughput reduction due to neighbor contention
+        if num_neighbors > 5:
+            contention_factor = 1.0 - min(0.3, (num_neighbors - 5) * 0.02)  # Up to 30% reduction
+            final_throughput *= contention_factor
+        
         # Calculate detailed latency components
         phy_components = self._calculate_phy_latency_components(selected_mcs, packet_bits)
         mac_components = self._calculate_mac_latency_components(cbr, per_total, num_neighbors, 
                                                               phy_components['total_phy_latency_ms']/1000)
         
-        # Protocol-specific adjustments for L3/SDN
+        # Protocol-specific adjustments
         l3_routing_delay = 0.0
         if self.config.enable_layer3 and vehicle.routing_protocol:
             if isinstance(vehicle.routing_protocol, AODVRoutingProtocol):
                 route_exists = vehicle.routing_protocol.get_next_hop(vehicle_id)
                 if route_exists:
-                    l3_routing_delay = 0.000005  # 5 microseconds for route table lookup
+                    l3_routing_delay = 0.000005
                 else:
-                    l3_routing_delay = 0.002  # 2 ms for route discovery
+                    l3_routing_delay = 0.002
             elif isinstance(vehicle.routing_protocol, OLSRRoutingProtocol):
-                l3_routing_delay = 0.000002  # 2 microseconds for route table lookup
+                l3_routing_delay = 0.000002
             elif isinstance(vehicle.routing_protocol, GeographicRoutingProtocol):
-                l3_routing_delay = 0.000008  # 8 microseconds for geographic calculation
+                l3_routing_delay = 0.000008
         
         sdn_delay = 0.0
         if self.config.enable_sdn:
-            flow_lookup_delay = 0.000003  # 3 microseconds for flow table lookup
+            flow_lookup_delay = 0.000003
             sdn_delay += flow_lookup_delay
             
             if hasattr(vehicle, 'sdn_metrics') and 'controller_latency' in vehicle.sdn_metrics:
@@ -6727,18 +6791,22 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     avg_controller_latency = sum(recent_controller_latencies) / len(recent_controller_latencies)
                     sdn_delay += avg_controller_latency
             else:
-                sdn_delay += 0.003  # 3 ms for controller communication
+                sdn_delay += 0.003
             
-            # SDN traffic engineering benefit
             if self.sdn_controller and hasattr(self.sdn_controller, 'centralized_optimization_factor'):
                 mac_efficiency *= self.sdn_controller.centralized_optimization_factor
         
-        # Total latency including L3/SDN components
-        total_latency_ms = (phy_components['total_phy_latency_ms'] + 
-                           mac_components['total_mac_latency_ms'] +
-                           l3_routing_delay * 1000 + sdn_delay * 1000)
+        # ENHANCED: Total latency with neighbor impact
+        base_latency_ms = (phy_components['total_phy_latency_ms'] + 
+                          mac_components['total_mac_latency_ms'] +
+                          l3_routing_delay * 1000 + sdn_delay * 1000)
         
-        # FIXED: Store offered load information for analysis
+        # Additional latency due to neighbor contention
+        if num_neighbors > 3:
+            contention_latency_ms = (num_neighbors - 3) * 0.2  # 0.2ms per neighbor above 3
+            base_latency_ms += contention_latency_ms
+        
+        # Store offered load information
         offered_load = getattr(vehicle, 'offered_load', cbr)
         congestion_ratio = offered_load / 1.0 if offered_load > 1.0 else 1.0
         
@@ -6751,7 +6819,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
             'phy_throughput': phy_throughput,
             'mac_throughput': final_throughput,
             'throughput': final_throughput,
-            'latency': total_latency_ms,
+            'latency': base_latency_ms,
             'collision_prob': collision_prob,
             'mac_efficiency': mac_efficiency,
             'selected_mcs': selected_mcs,
@@ -6768,7 +6836,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
             'retry_latency_ms': mac_components['retry_latency_ms'],
             'queue_latency_ms': mac_components['queue_latency_ms'],
             
-            # NEW: Offered load and congestion tracking
+            # Offered load and congestion tracking
             'offered_load': offered_load,
             'congestion_ratio': congestion_ratio,
             'channel_overload': 'Yes' if offered_load > 1.0 else 'No'
@@ -8022,7 +8090,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                 'beaconRate' in vehicle_response):
                 
                 # Bounds checking
-                new_power = max(10, min(33, vehicle_response['transmissionPower']))
+                new_power = max(1, min(30, vehicle_response['transmissionPower']))
                 new_mcs = max(0, min(9, round(vehicle_response['MCS'])))
                 new_beacon = max(1, min(20, vehicle_response['beaconRate']))
                 
@@ -8102,8 +8170,12 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     if veh_id in self.vehicles:
                         vehicle = self.vehicles[veh_id]
                         
-                        # Use vehicle.transmission_power as the primary source (this is what gets updated by RL)
-                        current_data['transmissionPower'] = getattr(vehicle, 'transmission_power', 20.0)
+                        # Use Coposite Value as the primary source (this is what gets updated by RL)
+                
+                        if ANTENNA_TYPE == "SECTORAL" and hasattr(vehicle, 'antenna_system'):
+                            current_data['transmissionPower'] = vehicle.antenna_system.get_weighted_average_power()
+                        else:
+                            current_data['transmissionPower'] = getattr(vehicle, 'transmission_power', 20.0)
                         
                         if ANTENNA_TYPE == "SECTORAL" and hasattr(vehicle, 'antenna_system'):
                             # Add additional RL state information for sectoral antennas
