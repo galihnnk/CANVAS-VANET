@@ -148,20 +148,19 @@ ANTENNA_TYPE = "OMNIDIRECTIONAL"  # Options: "OMNIDIRECTIONAL", "SECTORAL"
 # RL-controlled vs static sectors for sectoral antennas
 RL_CONTROLLED_SECTORS = ['front', 'rear']  # Only these will be adjusted by RL
 RL_STATIC_SECTORS = ['left', 'right']     # These remain static
-SIDE_ANTENNA_STATIC_POWER = 3.0          # Static power for side antennas (dBm)
+SIDE_ANTENNA_STATIC_POWER = 5.0          # Static power for side antennas (dBm) - INCREASED from 3.0
 
-# Updated Sectoral antenna configuration with static side powers
+# FAIR STATIC BASELINE
 SECTORAL_ANTENNA_CONFIG = {
-    "front": {"power_dbm": 12.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},  # Narrower beam = higher gain
-    "rear": {"power_dbm": 8.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},
-    "left": {"power_dbm": SIDE_ANTENNA_STATIC_POWER, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": False},
-    "right": {"power_dbm": SIDE_ANTENNA_STATIC_POWER, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": False}
+    "front": {"power_dbm": 15.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},  # 23.0 dBm EIRP
+    "rear": {"power_dbm": 15.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},   # 23.0 dBm EIRP  
+    "left": {"power_dbm": 5.0, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": True},    # 10.0 dBm EIRP
+    "right": {"power_dbm": 5.0, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": True}    # 10.0 dBm EIRP
 }
 
-# OMNIDIRECTIONAL ANTENNA CONFIGURATION
 OMNIDIRECTIONAL_ANTENNA_CONFIG = {
-    "power_dbm": 20.0,
-    "gain_db": 2.15
+    "power_dbm": 20.0,    # 23 dBm EIRP uniform
+    "gain_db": 3
 }
 
 # ENHANCED VISUALIZATION CONFIGURATION
@@ -1130,8 +1129,8 @@ class SectoralAntennaSystem:
                 self.sector_powers[sector] = rl_power
         else:
             # Distribute based on neighbor density in RL-controlled sectors only
-            min_power = max(10.0, rl_power - 5.0)  # Minimum power per sector
-            max_power = min(33.0, rl_power + 5.0)  # Maximum power per sector
+            min_power = max(1.0, rl_power - 5.0)  # Minimum power per sector
+            max_power = min(30.0, rl_power + 5.0)  # Maximum power per sector
             
             for sector in RL_CONTROLLED_SECTORS:
                 count = self.rl_controlled_neighbor_distribution.get(sector, 0)
@@ -8091,7 +8090,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                 'beaconRate' in vehicle_response):
                 
                 # Bounds checking
-                new_power = max(10, min(33, vehicle_response['transmissionPower']))
+                new_power = max(1, min(30, vehicle_response['transmissionPower']))
                 new_mcs = max(0, min(9, round(vehicle_response['MCS'])))
                 new_beacon = max(1, min(20, vehicle_response['beaconRate']))
                 
@@ -8171,8 +8170,12 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     if veh_id in self.vehicles:
                         vehicle = self.vehicles[veh_id]
                         
-                        # Use vehicle.transmission_power as the primary source (this is what gets updated by RL)
-                        current_data['transmissionPower'] = getattr(vehicle, 'transmission_power', 20.0)
+                        # Use Coposite Value as the primary source (this is what gets updated by RL)
+                
+                        if ANTENNA_TYPE == "SECTORAL" and hasattr(vehicle, 'antenna_system'):
+                            current_data['transmissionPower'] = vehicle.antenna_system.get_weighted_average_power()
+                        else:
+                            current_data['transmissionPower'] = getattr(vehicle, 'transmission_power', 20.0)
                         
                         if ANTENNA_TYPE == "SECTORAL" and hasattr(vehicle, 'antenna_system'):
                             # Add additional RL state information for sectoral antennas
