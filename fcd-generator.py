@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive FCD Data Generator for Variable Density VANET Learning by Galih Nugraha Nurkahfi
-galih.nugraha.nurkahfi@brin.go.id
+Comprehensive FCD Data Generator for Variable Density VANET Learning
 ====================================================================
 
 Generates realistic FCD files with:
@@ -9,7 +8,7 @@ Generates realistic FCD files with:
 - EXACT VEHICLE COUNT scenarios (NEW!)
 - Multiple traffic scenarios (rush hour, congestion, free flow)
 - Lane changing behavior
-- Speed variations based on traffic conditions
+- Speed variations based traffic conditions
 - Realistic acceleration/deceleration
 - Different vehicle types and behaviors
 
@@ -92,7 +91,7 @@ class TrafficScenario:
             'description': 'Smoothly varying exact vehicle counts',
             'type': 'exact_count',
             'base_count': 50,
-            'variation_amplitude': 30,  # ±30 vehicles
+            'variation_amplitude': 30,  # +/- 30 vehicles
             'variation_frequency': 600,  # Change every 10 minutes
             'min_count': 10,
             'max_count': 100
@@ -127,8 +126,8 @@ class Vehicle:
         self.direction = direction  # 'forward' or 'backward'
         self.vehicle_type = vehicle_type
         self.length = self._get_vehicle_length()
-        self.max_acceleration = 2.5  # m/s²
-        self.max_deceleration = 4.5  # m/s²
+        self.max_acceleration = 2.5  # m/s^2
+        self.max_deceleration = 4.5  # m/s^2
         self.active = True
         self.lane_change_cooldown = 0
         self.following_distance = 20.0  # Desired following distance
@@ -333,18 +332,18 @@ class ComprehensiveFCDGenerator:
     
     def generate_fcd(self, output_file: str):
         """Generate the complete FCD file"""
-        print(f"🚗 Starting FCD generation...")
-        print(f"📊 Scenario: {self.scenario['description']}")
+        print(f"Starting FCD generation...")
+        print(f"Scenario: {self.scenario['description']}")
         
         # Display exact count info if applicable
         if self.scenario.get('type') == 'exact_count':
             if 'vehicle_count' in self.scenario:
-                print(f"🎯 Exact Vehicle Count: {self.scenario['vehicle_count']} vehicles")
+                print(f"Exact Vehicle Count: {self.scenario['vehicle_count']} vehicles")
             elif 'base_count' in self.scenario:
-                print(f"🎯 Base Vehicle Count: {self.scenario['base_count']} vehicles (varying)")
+                print(f"Base Vehicle Count: {self.scenario['base_count']} vehicles (varying)")
         
-        print(f"⏱️  Duration: {self.simulation_duration} seconds")
-        print(f"🛣️  Road: {self.road_length}m with {self.num_lanes} lanes")
+        print(f"Duration: {self.simulation_duration} seconds")
+        print(f"Road: {self.road_length}m with {self.num_lanes} lanes")
         
         # Setup visualization if enabled
         if self.enable_visualization:
@@ -447,12 +446,12 @@ class ComprehensiveFCDGenerator:
                     channel_model = "C-NLOS-ENH"
                     expected_speed = "5-30 km/h"
                 
-                print(f"⏳ Progress: {progress:.1f}% (Time: {time:.0f}s)")
-                print(f"   📊 Vehicles: {len(active_vehicles)} total | {vehicles_per_km_per_direction:.0f} vehicles/km/direction")
-                print(f"   📡 Channel: {channel_model} | Density Factor: {current_density:.2f}")
+                print(f"Progress: {progress:.1f}% (Time: {time:.0f}s)")
+                print(f"   Vehicles: {len(active_vehicles)} total | {vehicles_per_km_per_direction:.0f} vehicles/km/direction")
+                print(f"   Channel: {channel_model} | Density Factor: {current_density:.2f}")
                 if target_count is not None:
-                    print(f"   🎯 Target Count: {target_count} | Actual: {len(active_vehicles)}")
-                print(f"   🏃 Current Speed: {current_avg_speed_kmh:.1f} km/h | Expected: {expected_speed}")
+                    print(f"   Target Count: {target_count} | Actual: {len(active_vehicles)}")
+                print(f"   Current Speed: {current_avg_speed_kmh:.1f} km/h | Expected: {expected_speed}")
                 print(f"   " + "="*60)
         
         # Write XML file
@@ -460,7 +459,7 @@ class ComprehensiveFCDGenerator:
         ET.indent(tree, space="  ", level=0)  # Pretty formatting
         tree.write(output_file, encoding='utf-8', xml_declaration=True)
         
-        print(f"✅ FCD data written to {output_file}")
+        print(f"FCD data written to {output_file}")
         self._generate_statistics_report(output_file)
     
     def _calculate_exact_vehicle_count(self, time: float) -> int:
@@ -627,7 +626,7 @@ class ComprehensiveFCDGenerator:
         # Calculate target vehicles for both directions
         target_count = int(vehicles_per_km_per_direction * road_length_km * 2)  # Both directions
         
-        # Add some random variation (±20%) for realism
+        # Add some random variation (+/-20%) for realism
         variation = random.uniform(0.8, 1.2)
         target_count = int(target_count * variation)
         
@@ -820,11 +819,11 @@ class ComprehensiveFCDGenerator:
             with open(stats_file, 'w') as f:
                 json.dump(stats, f, indent=2)
             
-            print(f"📊 Statistics report saved to {stats_file}")
-            print("\n🎯 Simulation Summary:")
+            print(f"Statistics report saved to {stats_file}")
+            print("\nSimulation Summary:")
             
             if self.scenario.get('type') == 'exact_count':
-                print(f"   🎯 EXACT COUNT MODE:")
+                print(f"   EXACT COUNT MODE:")
                 print(f"   Vehicle Count Range: {stats['traffic_statistics']['min_vehicle_count']} - {stats['traffic_statistics']['max_vehicle_count']}")
                 if 'exact_count_info' in stats:
                     print(f"   Count Variance: {stats['exact_count_info']['count_variance']:.1f}")
@@ -839,27 +838,27 @@ class ComprehensiveFCDGenerator:
             avg_vehicles_per_km_per_direction = avg_vehicles_per_direction / road_length_km
             max_vehicles_per_km_per_direction = max_vehicles_per_direction / road_length_km
             
-            print(f"   🚗 Vehicles/km/direction: Avg={avg_vehicles_per_km_per_direction:.0f}, Max={max_vehicles_per_km_per_direction:.0f}")
-            print(f"   🏃 Speed Range: {stats['traffic_statistics']['min_speed_kmh']:.1f} - {stats['traffic_statistics']['max_speed_kmh']:.1f} km/h")
+            print(f"   Vehicles/km/direction: Avg={avg_vehicles_per_km_per_direction:.0f}, Max={max_vehicles_per_km_per_direction:.0f}")
+            print(f"   Speed Range: {stats['traffic_statistics']['min_speed_kmh']:.1f} - {stats['traffic_statistics']['max_speed_kmh']:.1f} km/h")
             
             # Validation against your standard table
-            print(f"\n📋 Validation Against Standards:")
-            print(f"   🚗 DENSITY COMPLIANCE:")
+            print(f"\nValidation Against Standards:")
+            print(f"   DENSITY COMPLIANCE:")
             if max_vehicles_per_km_per_direction >= 240:
-                print(f"     ✅ Reaches GRIDLOCK level (240+ vehicles/km/direction)")
+                print(f"     OK: Reaches GRIDLOCK level (240+ vehicles/km/direction)")
             elif max_vehicles_per_km_per_direction >= 180:
-                print(f"     ✅ Reaches HEAVY TRAFFIC level (180+ vehicles/km/direction)")
+                print(f"     OK: Reaches HEAVY TRAFFIC level (180+ vehicles/km/direction)")
             elif max_vehicles_per_km_per_direction >= 120:
-                print(f"     ✅ Reaches MODERATE TRAFFIC level (120+ vehicles/km/direction)")
+                print(f"     OK: Reaches MODERATE TRAFFIC level (120+ vehicles/km/direction)")
             elif max_vehicles_per_km_per_direction >= 60:
-                print(f"     ⚠️  Reaches LIGHT TRAFFIC level (60+ vehicles/km/direction)")
+                print(f"     WARNING: Reaches LIGHT TRAFFIC level (60+ vehicles/km/direction)")
             elif max_vehicles_per_km_per_direction >= 30:
-                print(f"     ⚠️  Reaches MINIMUM level (30+ vehicles/km/direction)")
+                print(f"     WARNING: Reaches MINIMUM level (30+ vehicles/km/direction)")
             else:
-                print(f"     ❌ BELOW MINIMUM standard (<30 vehicles/km/direction)")
-                print(f"        🔧 Suggestion: Increase ROAD_LENGTH or adjust spawning")
+                print(f"     ERROR: BELOW MINIMUM standard (<30 vehicles/km/direction)")
+                print(f"        Suggestion: Increase ROAD_LENGTH or adjust spawning")
             
-            print(f"   🏃 SPEED COMPLIANCE:")
+            print(f"   SPEED COMPLIANCE:")
             min_speed = stats['traffic_statistics']['min_speed_kmh']
             max_speed = stats['traffic_statistics']['max_speed_kmh']
             avg_speed = stats['traffic_statistics']['avg_speed_kmh']
@@ -867,30 +866,30 @@ class ComprehensiveFCDGenerator:
             # Check speed realism based on expected ranges
             if max_vehicles_per_km_per_direction >= 200:  # Gridlock
                 if 5 <= avg_speed <= 30:
-                    print(f"     ✅ Gridlock speeds realistic (5-30 km/h): Avg {avg_speed:.1f} km/h")
+                    print(f"     OK: Gridlock speeds realistic (5-30 km/h): Avg {avg_speed:.1f} km/h")
                 else:
-                    print(f"     ⚠️  Gridlock speeds should be 5-30 km/h, got {avg_speed:.1f} km/h")
+                    print(f"     WARNING: Gridlock speeds should be 5-30 km/h, got {avg_speed:.1f} km/h")
             elif max_vehicles_per_km_per_direction >= 150:  # Heavy congestion
                 if 30 <= avg_speed <= 50:
-                    print(f"     ✅ Heavy traffic speeds realistic (30-50 km/h): Avg {avg_speed:.1f} km/h")
+                    print(f"     OK: Heavy traffic speeds realistic (30-50 km/h): Avg {avg_speed:.1f} km/h")
                 else:
-                    print(f"     ⚠️  Heavy traffic speeds should be 30-50 km/h, got {avg_speed:.1f} km/h")
+                    print(f"     WARNING: Heavy traffic speeds should be 30-50 km/h, got {avg_speed:.1f} km/h")
             elif max_vehicles_per_km_per_direction >= 90:   # Moderate
                 if 60 <= avg_speed <= 80:
-                    print(f"     ✅ Moderate traffic speeds realistic (60-80 km/h): Avg {avg_speed:.1f} km/h")
+                    print(f"     OK: Moderate traffic speeds realistic (60-80 km/h): Avg {avg_speed:.1f} km/h")
                 else:
-                    print(f"     ⚠️  Moderate traffic speeds should be 60-80 km/h, got {avg_speed:.1f} km/h")
+                    print(f"     WARNING: Moderate traffic speeds should be 60-80 km/h, got {avg_speed:.1f} km/h")
             elif max_vehicles_per_km_per_direction >= 30:   # Light
                 if 80 <= avg_speed <= 110:
-                    print(f"     ✅ Light traffic speeds realistic (80-110 km/h): Avg {avg_speed:.1f} km/h")
+                    print(f"     OK: Light traffic speeds realistic (80-110 km/h): Avg {avg_speed:.1f} km/h")
                 else:
-                    print(f"     ⚠️  Light traffic speeds should be 80-110 km/h, got {avg_speed:.1f} km/h")
+                    print(f"     WARNING: Light traffic speeds should be 80-110 km/h, got {avg_speed:.1f} km/h")
             
-            print(f"   📈 SPEED RANGE: {min_speed:.1f} - {max_speed:.1f} km/h")
+            print(f"   SPEED RANGE: {min_speed:.1f} - {max_speed:.1f} km/h")
             
         except Exception as e:
-            print(f"⚠️  Warning: Could not save statistics report: {e}")
-            print("📊 Basic Statistics:")
+            print(f"WARNING: Could not save statistics report: {e}")
+            print("Basic Statistics:")
             if self.density_history:
                 print(f"   Average Density Factor: {np.mean(self.density_history):.2f}")
                 
@@ -903,7 +902,7 @@ class ComprehensiveFCDGenerator:
                 avg_per_km_per_direction = avg_per_direction / road_length_km
                 max_per_km_per_direction = max_per_direction / road_length_km
                 
-                print(f"   🚗 Vehicles/km/direction: Avg={avg_per_km_per_direction:.0f}, Max={max_per_km_per_direction:.0f}")
+                print(f"   Vehicles/km/direction: Avg={avg_per_km_per_direction:.0f}, Max={max_per_km_per_direction:.0f}")
             else:
                 print(f"   No density data available")
             print(f"   Total Vehicles Spawned: {self.vehicle_counter}")
@@ -944,7 +943,7 @@ def main():
     """Main function with direct configuration - EDIT THESE SETTINGS"""
     
     # =========================================================================
-    # 🔧 EDIT THESE SETTINGS DIRECTLY (No command line needed!)
+    # EDIT THESE SETTINGS DIRECTLY (No command line needed!)
     # =========================================================================
     
     # Choose scenario (change this to what you want):
@@ -964,12 +963,12 @@ def main():
     SCENARIO = 'exact_count_custom'
     
     # For exact count scenarios, set your desired vehicle count:
-    EXACT_VEHICLE_COUNT = 500  # Only used for exact_count scenarios
+    EXACT_VEHICLE_COUNT = 85  # Only used for exact_count scenarios
     
     # Simulation settings - UPDATED FOR REALISTIC DENSITY
-    DURATION = 10000              # Simulation time in seconds
-    ROAD_LENGTH = 1000           # Road length in meters
-    OUTPUT_FILE = 'dataset_1km_10000seconds_500vehicles.xml'  # Output filename
+    DURATION = 5000                # Simulation time in seconds
+    ROAD_LENGTH = 500              # Road length in meters
+    OUTPUT_FILE = 'fcd_exact_count_data.xml'  # Output filename
     ENABLE_VISUALIZATION = False    # Set to True to see real-time animation
     TIME_STEP = 1.0                # Time step in seconds
     NUM_LANES_PER_DIRECTION = 3    # Lanes per direction (3 = 6 total lanes)
@@ -989,34 +988,34 @@ def main():
         'exact_vehicle_count': EXACT_VEHICLE_COUNT  # For exact count scenarios
     }
     
-    print("🚗 Comprehensive FCD Generator for Variable Density Learning")
+    print("Comprehensive FCD Generator for Variable Density Learning")
     print("=" * 60)
-    print(f"📊 Scenario: {SCENARIO}")
+    print(f"Scenario: {SCENARIO}")
     if SCENARIO.startswith('exact_count'):
-        print(f"🎯 Exact Vehicle Count: {EXACT_VEHICLE_COUNT}")
-    print(f"⏱️  Duration: {DURATION} seconds")
-    print(f"🛣️  Road: {ROAD_LENGTH}m with {NUM_LANES_PER_DIRECTION*2} lanes")
-    print(f"📁 Output: {OUTPUT_FILE}")
-    print(f"👁️  Visualization: {'Enabled' if ENABLE_VISUALIZATION else 'Disabled'}")
+        print(f"Exact Vehicle Count: {EXACT_VEHICLE_COUNT}")
+    print(f"Duration: {DURATION} seconds")
+    print(f"Road: {ROAD_LENGTH}m with {NUM_LANES_PER_DIRECTION*2} lanes")
+    print(f"Output: {OUTPUT_FILE}")
+    print(f"Visualization: {'Enabled' if ENABLE_VISUALIZATION else 'Disabled'}")
     
-    print("\n🆕 NEW EXACT COUNT SCENARIOS AVAILABLE:")
-    print("   • exact_count_static - Maintains exact number throughout")
-    print("   • exact_count_phases - Different exact counts in phases")  
-    print("   • exact_count_varying - Smoothly varying exact counts")
-    print("   • exact_count_waves - Periodic waves of exact counts")
-    print("   • exact_count_custom - Your custom exact count")
+    print("\nNEW EXACT COUNT SCENARIOS AVAILABLE:")
+    print("   * exact_count_static - Maintains exact number throughout")
+    print("   * exact_count_phases - Different exact counts in phases")  
+    print("   * exact_count_varying - Smoothly varying exact counts")
+    print("   * exact_count_waves - Periodic waves of exact counts")
+    print("   * exact_count_custom - Your custom exact count")
     
     # Generate FCD
     generator = ComprehensiveFCDGenerator(config)
     generator.generate_fcd(OUTPUT_FILE)
     
-    print("\n✅ FCD generation completed successfully!")
-    print(f"📁 Output files:")
+    print("\nFCD generation completed successfully!")
+    print(f"Output files:")
     print(f"   - FCD data: {OUTPUT_FILE}")
     print(f"   - Statistics: {OUTPUT_FILE.replace('.xml', '_statistics.json')}")
     
     if SCENARIO.startswith('exact_count'):
-        print(f"\n🎯 EXACT COUNT MODE SUMMARY:")
+        print(f"\nEXACT COUNT MODE SUMMARY:")
         print(f"   Target vehicles maintained: {EXACT_VEHICLE_COUNT}")
         print(f"   This gives you precise control over vehicle density!")
 
