@@ -40,8 +40,8 @@ from dataclasses import dataclass, field
 # ===============================================================================
 
 # FILE AND OUTPUT CONFIGURATION
-FCD_FILE = "fcd_training_data.xml"  # Path to your FCD XML file
-OUTPUT_FILENAME = "Baseline-trainingdata-omnidirectional-L3.xlsx"  # Set to None for automatic naming, or specify custom name
+FCD_FILE = "fcd-output-250m-45-vehicle-500second.xml"  # Path to your FCD XML file
+OUTPUT_FILENAME = "baseline.xlsx"  # Set to None for automatic naming, or specify custom name
 
 # FCD DATA RELOADING CONFIGURATION
 FCD_RELOAD_COUNT = 1  # Number of times to reload FCD data
@@ -55,10 +55,10 @@ EXCEL_UPDATE_FREQUENCY = 1  # Update Excel file every N timestamps
 # RL INTEGRATION CONFIGURATION
 ENABLE_RL = False  # Set to True to enable RL optimization
 RL_HOST = '127.0.0.1'  # RL server host address
-RL_PORT = 5005  # RL server port
+RL_PORT = 5000  # RL server port
 
 # NEW: LAYER 3 NETWORKING CONFIGURATION
-ENABLE_LAYER3 = True  # Enable Layer 3 networking stack
+ENABLE_LAYER3 = False  # Enable Layer 3 networking stack
 ROUTING_PROTOCOL = "HYBRID"  # Options: "AODV", "OLSR", "GEOGRAPHIC", "HYBRID"
 ENABLE_MULTI_HOP = True  # Enable multi-hop communication
 MAX_HOP_COUNT = 5  # Maximum number of hops for route discovery
@@ -89,7 +89,7 @@ RANDOM_SEED = 42  # For reproducible results
 TIME_STEP = 1.0  # Simulation time step in seconds
 
 # PHY LAYER CONFIGURATION (IEEE 802.11bd compliant)
-TRANSMISSION_POWER_DBM = 20.0
+TRANSMISSION_POWER_DBM = 5.0
 BANDWIDTH = 10e6
 NOISE_FIGURE = 9.0
 CHANNEL_MODEL = "highway_los"
@@ -148,19 +148,19 @@ ANTENNA_TYPE = "OMNIDIRECTIONAL"  # Options: "OMNIDIRECTIONAL", "SECTORAL"
 # RL-controlled vs static sectors for sectoral antennas
 RL_CONTROLLED_SECTORS = ['front', 'rear']  # Only these will be adjusted by RL
 RL_STATIC_SECTORS = ['left', 'right']     # These remain static
-SIDE_ANTENNA_STATIC_POWER = 5.0          # Static power for side antennas (dBm) - INCREASED from 3.0
+SIDE_ANTENNA_STATIC_POWER = 5.0          # Static power for side antennas (dBm)
 
 # FAIR STATIC BASELINE
 SECTORAL_ANTENNA_CONFIG = {
-    "front": {"power_dbm": 15.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},  # 23.0 dBm EIRP
-    "rear": {"power_dbm": 15.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},   # 23.0 dBm EIRP  
+    "front": {"power_dbm": 17.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},  # 25.0 dBm EIRP
+    "rear": {"power_dbm": 17.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},   # 25.0 dBm EIRP  
     "left": {"power_dbm": 5.0, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": True},    # 10.0 dBm EIRP
     "right": {"power_dbm": 5.0, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": True}    # 10.0 dBm EIRP
 }
 
 OMNIDIRECTIONAL_ANTENNA_CONFIG = {
-    "power_dbm": 20.0,    # 23 dBm EIRP uniform
-    "gain_db": 3
+    "power_dbm": 20.0,    # 25 dBm EIRP uniform
+    "gain_db": 5
 }
 
 # ENHANCED VISUALIZATION CONFIGURATION
@@ -1130,7 +1130,7 @@ class SectoralAntennaSystem:
         else:
             # Distribute based on neighbor density in RL-controlled sectors only
             min_power = max(1.0, rl_power - 5.0)  # Minimum power per sector
-            max_power = min(30.0, rl_power + 5.0)  # Maximum power per sector
+            max_power = min(22.0, rl_power + 5.0)  # Maximum power per sector
             
             for sector in RL_CONTROLLED_SECTORS:
                 count = self.rl_controlled_neighbor_distribution.get(sector, 0)
@@ -4746,8 +4746,8 @@ class RealisticInterferenceCalculator:
         return final_range
     
     def calculate_sinr_with_interference(self, vehicle_id: str, neighbors: list, 
-                           vehicle_tx_power: float, channel_model: str,
-                           background_traffic_manager=None) -> float:
+                       vehicle_tx_power: float, channel_model: str,
+                       background_traffic_manager=None) -> float:
         """ENHANCED SINR calculation with stronger neighbor interference modeling"""
         
         if not neighbors:
@@ -4780,6 +4780,9 @@ class RealisticInterferenceCalculator:
         strongest_neighbor = max(neighbors, key=lambda n: n.get('rx_power_dbm', -150))
         signal_power_dbm = strongest_neighbor.get('rx_power_dbm', -100)
         
+        # FIX: Define signal_power_mw immediately after signal_power_dbm
+        signal_power_mw = 10**((signal_power_dbm - 30) / 10.0)
+        
         # ENHANCED: Calculate interference from all other neighbors with stronger modeling
         total_interference_power_mw = 0
         thermal_noise_power_mw = 10**((self.thermal_noise_power_dbm - 30) / 10.0)
@@ -4788,7 +4791,7 @@ class RealisticInterferenceCalculator:
             if neighbor['id'] != strongest_neighbor['id']:
                 distance = neighbor['distance']
                 
-                if distance > 3 and distance < 2500:  # Expanded interference range
+                if distance > 5 and distance < 500:  # More realistic range
                     intf_power_dbm = self.calculate_received_power_dbm(
                         neighbor['tx_power'], 
                         distance,
@@ -4797,8 +4800,8 @@ class RealisticInterferenceCalculator:
                         channel_model
                     )
                     
-                    # ENHANCED: Lower threshold for interference consideration
-                    if intf_power_dbm > self.thermal_noise_power_dbm + 6:  # Reduced from 8
+                    # ENHANCED: Higher threshold for interference consideration
+                    if intf_power_dbm > self.thermal_noise_power_dbm + 12:  # Increased from 6
                         intf_power_mw = 10**((intf_power_dbm - 30) / 10.0)
                         
                         # ENHANCED: Stronger activity factor based on realistic VANET behavior
@@ -4807,26 +4810,25 @@ class RealisticInterferenceCalculator:
                         duty_cycle = beacon_rate * packet_duration
                         activity_factor = min(0.6, duty_cycle * 1.2)  # Increased from 0.4
                         
-                        # ENHANCED: More aggressive distance-based interference
+                        # ENHANCED: More realistic distance-based interference
                         if distance <= 50:
-                            distance_factor = 1.0    # Full interference at close range
+                            distance_factor = 1.0
                         elif distance <= 100:
-                            distance_factor = 0.85   # Increased from 0.8
+                            distance_factor = 0.6
                         elif distance <= 200:
-                            distance_factor = 0.65   # Increased from 0.5
-                        elif distance <= 400:
-                            distance_factor = 0.35   # Increased from 0.25
+                            distance_factor = 0.2    # Much lower at 200m
+                        elif distance <= 500:
+                            distance_factor = 0.05   # Very low beyond 200m
                         else:
-                            distance_factor = 0.15   # Increased from 0.1
+                            distance_factor = 0.01
                         
                         # ENHANCED: More realistic capture effect (less forgiving)
-                        signal_power_mw = 10**((signal_power_dbm - 30) / 10.0)
-                        if signal_power_mw > intf_power_mw * 20:      # Increased threshold from 15
-                            capture_factor = 0.08   # Increased from 0.05
-                        elif signal_power_mw > intf_power_mw * 8:    # Increased from 5
-                            capture_factor = 0.4    # Increased from 0.3
+                        if signal_power_mw > intf_power_mw * 10:      # 10 dB advantage
+                            capture_factor = 0.02   # Nearly eliminate interference
+                        elif signal_power_mw > intf_power_mw * 5:     # 7 dB advantage  
+                            capture_factor = 0.1    # Significant reduction
                         else:
-                            capture_factor = 0.9    # Increased from 0.8
+                            capture_factor = 0.5    # Co-channel interference
                         
                         weighted_interference = (intf_power_mw * activity_factor * 
                                                distance_factor * capture_factor)
@@ -4861,8 +4863,8 @@ class RealisticInterferenceCalculator:
         non_vanet_interference_mw = thermal_noise_power_mw * config["non_vanet_interference"] * 3.0
         
         # ENHANCED: Additional neighbor density interference
-        if num_neighbors > 5:
-            density_interference_factor = 1.0 + ((num_neighbors - 5) * 0.02)  # 2% per neighbor above 5
+        if num_neighbors > 12:
+            density_interference_factor = 1.0 + ((num_neighbors - 12) * 0.02)  # 2% per neighbor above 12
             density_interference_mw = thermal_noise_power_mw * density_interference_factor * 0.5
         else:
             density_interference_mw = 0
@@ -4878,8 +4880,6 @@ class RealisticInterferenceCalculator:
                                       density_interference_mw)
         
         # Calculate SINR
-        signal_power_mw = 10**((signal_power_dbm - 30) / 10.0)
-        
         if total_noise_interference_mw > 0 and signal_power_mw > 0:
             sinr_linear = signal_power_mw / total_noise_interference_mw
             sinr_db = 10 * math.log10(sinr_linear)
@@ -7348,8 +7348,8 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                 for result in timestamp_results:
                     # Calculate offered load and congestion metrics
                     offered_load = result.get('offered_load', result.get('CBR', 0))
-                    actual_cbr = offered_load
-                    congestion_ratio = offered_load
+                    actual_cbr = offered_load  # Bound CBR at 1.0
+                    congestion_ratio = offered_load / 1.0 
                     
                     row = [
                         # Basic information
@@ -8090,7 +8090,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                 'beaconRate' in vehicle_response):
                 
                 # Bounds checking
-                new_power = max(1, min(30, vehicle_response['transmissionPower']))
+                new_power = max(1, min(22, vehicle_response['transmissionPower']))
                 new_mcs = max(0, min(9, round(vehicle_response['MCS'])))
                 new_beacon = max(1, min(20, vehicle_response['beaconRate']))
                 
@@ -8160,8 +8160,11 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     # Ensure all required fields exist
                     if 'CBR' not in current_data or math.isnan(current_data.get('CBR', 0)):
                         current_data['CBR'] = 0
-                    if 'SINR' not in current_data or math.isnan(current_data.get('SINR', 0)):
+                    # Only set to 0 if truly invalid, otherwise keep the calculated value
+                    if 'SINR' not in current_data:
                         current_data['SINR'] = 0
+                    elif math.isnan(current_data['SINR']) or current_data['SINR'] < -50:
+                        current_data['SINR'] = 0  # Only for truly invalid values
                     if 'neighbors' not in current_data or current_data['neighbors'] is None:
                         current_data['neighbors'] = 0
                     
