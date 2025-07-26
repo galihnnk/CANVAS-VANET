@@ -6517,7 +6517,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
             offered_load_with_bg *= density_factor
         
         vehicle.offered_load = max(base_background, offered_load_with_bg)
-        actual_cbr = min(1.0, offered_load_with_bg)
+        actual_cbr = offered_load_with_bg
         
         return actual_cbr
     
@@ -7348,8 +7348,8 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                 for result in timestamp_results:
                     # Calculate offered load and congestion metrics
                     offered_load = result.get('offered_load', result.get('CBR', 0))
-                    actual_cbr = min(1.0, offered_load)  # Bound CBR at 1.0
-                    congestion_ratio = offered_load / 1.0 if offered_load > 1.0 else 1.0
+                    actual_cbr = offered_load
+                    congestion_ratio = offered_load
                     
                     row = [
                         # Basic information
