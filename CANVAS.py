@@ -40,8 +40,8 @@ from dataclasses import dataclass, field
 # ===============================================================================
 
 # FILE AND OUTPUT CONFIGURATION
-FCD_FILE = "fcd-output-250m-45-vehicle-500second.xml"  # Path to your FCD XML file
-OUTPUT_FILENAME = "baseline.xlsx"  # Set to None for automatic naming, or specify custom name
+FCD_FILE = "fcd_training_data_per10.xml"  # Path to your FCD XML file
+OUTPUT_FILENAME = "baseline-sectoral.xlsx"  # Set to None for automatic naming, or specify custom name
 
 # FCD DATA RELOADING CONFIGURATION
 FCD_RELOAD_COUNT = 1  # Number of times to reload FCD data
@@ -143,7 +143,7 @@ RL_LOG_FREQUENCY = 1    # Log every N RL communications
 # ===============================================================================
 
 # ANTENNA TYPE CONFIGURATION
-ANTENNA_TYPE = "OMNIDIRECTIONAL"  # Options: "OMNIDIRECTIONAL", "SECTORAL"
+ANTENNA_TYPE = "SECTORAL"  # Options: "OMNIDIRECTIONAL", "SECTORAL"
 
 # RL-controlled vs static sectors for sectoral antennas
 RL_CONTROLLED_SECTORS = ['front', 'rear']  # Only these will be adjusted by RL
@@ -152,15 +152,15 @@ SIDE_ANTENNA_STATIC_POWER = 5.0          # Static power for side antennas (dBm)
 
 # FAIR STATIC BASELINE
 SECTORAL_ANTENNA_CONFIG = {
-    "front": {"power_dbm": 17.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},  # 25.0 dBm EIRP
-    "rear": {"power_dbm": 17.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},   # 25.0 dBm EIRP  
-    "left": {"power_dbm": 5.0, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": True},    # 10.0 dBm EIRP
-    "right": {"power_dbm": 5.0, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": True}    # 10.0 dBm EIRP
+    "front": {"power_dbm": 20.0, "gain_db": 0.0, "beamwidth_deg": 60, "enabled": True},  # 25.0 dBm EIRP
+    "rear": {"power_dbm": 20.0, "gain_db": 0.0, "beamwidth_deg": 60, "enabled": True},   # 25.0 dBm EIRP  
+    "left": {"power_dbm": 5.0, "gain_db": 0.0, "beamwidth_deg": 90, "enabled": True},    # 10.0 dBm EIRP
+    "right": {"power_dbm": 5.0, "gain_db": 0.0, "beamwidth_deg": 90, "enabled": True}    # 10.0 dBm EIRP
 }
 
 OMNIDIRECTIONAL_ANTENNA_CONFIG = {
     "power_dbm": 20.0,    # 25 dBm EIRP uniform
-    "gain_db": 5
+    "gain_db": 0
 }
 
 # ENHANCED VISUALIZATION CONFIGURATION
@@ -1129,8 +1129,10 @@ class SectoralAntennaSystem:
                 self.sector_powers[sector] = rl_power
         else:
             # Distribute based on neighbor density in RL-controlled sectors only
-            min_power = max(1.0, rl_power - 5.0)  # Minimum power per sector
-            max_power = min(22.0, rl_power + 5.0)  # Maximum power per sector
+            #min_power = max(1.0, rl_power - 5.0)  # Minimum power per sector
+            #max_power = min(30.0, rl_power + 5.0)  # Maximum power per sector
+            min_power = 1.0  # Minimum power per sector
+            max_power = 30.0  # Maximum power per sector
             
             for sector in RL_CONTROLLED_SECTORS:
                 count = self.rl_controlled_neighbor_distribution.get(sector, 0)
@@ -6642,7 +6644,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         
         # FIXED: Store offered load information for analysis
         offered_load = getattr(vehicle, 'offered_load', cbr)
-        congestion_ratio = offered_load / 1.0 if offered_load > 1.0 else 1.0
+        congestion_ratio = offered_load / 1.0
         
         return {
             'ber': ber,
@@ -8090,7 +8092,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                 'beaconRate' in vehicle_response):
                 
                 # Bounds checking
-                new_power = max(1, min(22, vehicle_response['transmissionPower']))
+                new_power = max(1, min(30, vehicle_response['transmissionPower']))
                 new_mcs = max(0, min(9, round(vehicle_response['MCS'])))
                 new_beacon = max(1, min(20, vehicle_response['beaconRate']))
                 
