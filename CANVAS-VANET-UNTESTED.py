@@ -40,8 +40,8 @@ from dataclasses import dataclass, field
 # ===============================================================================
 
 # FILE AND OUTPUT CONFIGURATION
-FCD_FILE = "fcd-output-250m-45-vehicle-500second.xml"  # Path to your FCD XML file
-OUTPUT_FILENAME = "testingSINR.xlsx"  # Set to None for automatic naming, or specify custom name
+FCD_FILE = "fcd-output-500m-40vehicles-15000seconds.xml"  # Path to your FCD XML file
+OUTPUT_FILENAME = "Baseline-Omnidirectional.xlsx"  # Set to None for automatic naming, or specify custom name
 
 # FCD DATA RELOADING CONFIGURATION
 FCD_RELOAD_COUNT = 1  # Number of times to reload FCD data
@@ -148,7 +148,7 @@ ANTENNA_TYPE = "OMNIDIRECTIONAL"  # Options: "OMNIDIRECTIONAL", "SECTORAL"
 # RL-controlled vs static sectors for sectoral antennas
 RL_CONTROLLED_SECTORS = ['front', 'rear']  # Only these will be adjusted by RL
 RL_STATIC_SECTORS = ['left', 'right']     # These remain static
-SIDE_ANTENNA_STATIC_POWER = 5.0          # Static power for side antennas (dBm)
+SIDE_ANTENNA_STATIC_POWER = 2.0          # Static power for side antennas (dBm)
 
 # FAIR STATIC BASELINE
 SECTORAL_ANTENNA_CONFIG = {
