@@ -89,7 +89,7 @@ RANDOM_SEED = 42  # For reproducible results
 TIME_STEP = 1.0  # Simulation time step in seconds
 
 # PHY LAYER CONFIGURATION (IEEE 802.11bd compliant)
-TRANSMISSION_POWER_DBM = 5.0
+TRANSMISSION_POWER_DBM = 1.0
 BANDWIDTH = 10e6
 NOISE_FIGURE = 9.0
 CHANNEL_MODEL = "highway_los"
@@ -152,15 +152,15 @@ SIDE_ANTENNA_STATIC_POWER = 5.0          # Static power for side antennas (dBm)
 
 # FAIR STATIC BASELINE
 SECTORAL_ANTENNA_CONFIG = {
-    "front": {"power_dbm": 17.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},  # 25.0 dBm EIRP
-    "rear": {"power_dbm": 17.0, "gain_db": 8.0, "beamwidth_deg": 60, "enabled": True},   # 25.0 dBm EIRP  
-    "left": {"power_dbm": 5.0, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": True},    # 10.0 dBm EIRP
-    "right": {"power_dbm": 5.0, "gain_db": 5.0, "beamwidth_deg": 90, "enabled": True}    # 10.0 dBm EIRP
+    "front": {"power_dbm": 17.0, "gain_db": 0.0, "beamwidth_deg": 60, "enabled": True},
+    "rear": {"power_dbm": 17.0, "gain_db": 0.0, "beamwidth_deg": 60, "enabled": True},  
+    "left": {"power_dbm": 5.0, "gain_db": 0.0, "beamwidth_deg": 90, "enabled": True},
+    "right": {"power_dbm": 5.0, "gain_db": 0.0, "beamwidth_deg": 90, "enabled": True}    
 }
 
 OMNIDIRECTIONAL_ANTENNA_CONFIG = {
     "power_dbm": 20.0,    # 25 dBm EIRP uniform
-    "gain_db": 5
+    "gain_db": 0.0
 }
 
 # ENHANCED VISUALIZATION CONFIGURATION
@@ -1129,9 +1129,10 @@ class SectoralAntennaSystem:
                 self.sector_powers[sector] = rl_power
         else:
             # Distribute based on neighbor density in RL-controlled sectors only
-            min_power = max(1.0, rl_power - 5.0)  # Minimum power per sector
-            max_power = min(22.0, rl_power + 5.0)  # Maximum power per sector
-            
+            #min_power = max(1.0, rl_power - 5.0)  # Minimum power per sector
+            #max_power = min(22.0, rl_power + 5.0)  # Maximum power per sector
+            min_power = 1  # Minimum power per sector
+            max_power = 30  # Maximum power per sector
             for sector in RL_CONTROLLED_SECTORS:
                 count = self.rl_controlled_neighbor_distribution.get(sector, 0)
                 if total_rl_neighbors > 0:
@@ -8440,7 +8441,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                 'beaconRate' in vehicle_response):
                 
                 # Bounds checking
-                new_power = max(1, min(22, vehicle_response['transmissionPower']))
+                new_power = max(1, min(30, vehicle_response['transmissionPower']))
                 new_mcs = max(0, min(9, round(vehicle_response['MCS'])))
                 new_beacon = max(1, min(20, vehicle_response['beaconRate']))
                 
