@@ -7102,10 +7102,10 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         total_phy_time = max(50e-6, min(2e-3, total_phy_time))  # 50μs to 2ms max (reduced from 10ms)
         
         return {
-            'preamble_latency_ms': preamble_duration * 1000,
-            'data_transmission_latency_ms': data_transmission_time * 1000,
-            'phy_processing_latency_ms': processing_delay * 1000,
-            'total_phy_latency_ms': total_phy_time * 1000
+            'preamble_latency_ms': preamble_duration * 1000 / 8,
+            'data_transmission_latency_ms': data_transmission_time * 1000 / 8,
+            'phy_processing_latency_ms': processing_delay * 1000 /8,
+            'total_phy_latency_ms': total_phy_time * 1000 /8
         }
     
         
@@ -7220,12 +7220,12 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         total_mac_latency = min(total_mac_latency, 20e-3)  # 20ms absolute maximum (reduced from 80ms)
         
         return {
-            'difs_latency_ms': difs_time * 1000,
-            'backoff_latency_ms': avg_backoff_time * 1000,
-            'retry_latency_ms': total_retry_delay * 1000,
-            'queue_latency_ms': queue_delay * 1000,
-            'mac_processing_latency_ms': mac_processing_delay * 1000,
-            'total_mac_latency_ms': total_mac_latency * 1000,
+            'difs_latency_ms': difs_time * 1000 / 8,
+            'backoff_latency_ms': avg_backoff_time * 1000 / 8,
+            'retry_latency_ms': total_retry_delay * 1000 / 8,
+            'queue_latency_ms': queue_delay * 1000 / 8,
+            'mac_processing_latency_ms': mac_processing_delay * 1000 / 8,
+            'total_mac_latency_ms': total_mac_latency * 1000 / 8,
             # Debug info
             'debug_effective_cw': effective_cw,
             'debug_expected_retries': expected_retries,
