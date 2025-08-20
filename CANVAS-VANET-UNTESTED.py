@@ -7151,169 +7151,178 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
     
     def _calculate_mac_latency_components(self, cbr: float, per: float, neighbor_count: int, 
                                     phy_tx_time: float) -> Dict[str, float]:
-    """ENHANCED: Calculate detailed MAC layer latency with aggressive density scaling"""
-    
-    # IEEE 802.11bd MAC timing parameters
-    sifs = 16e-6  # 16 μs
-    difs = 34e-6  # 34 μs  
-    slot_time = 9e-6  # 9 μs
-    
-    # ENHANCED: More aggressive CBR impact on contention window
-    base_cw = 15  # IEEE 802.11bd CWmin
-    
-    if cbr <= 0.2:
-        cw_multiplier = 1.0
-    elif cbr <= 0.4:
-        cw_multiplier = 2.0    # Increased from 1.4
-    elif cbr <= 0.6:
-        cw_multiplier = 4.5    # Increased from 2.2
-    elif cbr <= 0.8:
-        cw_multiplier = 8.0    # Increased from 3.5
-    else:
-        # VERY aggressive for high CBR (>0.8)
-        excess_cbr = cbr - 0.8
-        cw_multiplier = 8.0 + (excess_cbr * 25.0)  # Can reach 13x at CBR=1.0
-    
-    # ENHANCED: Exponential neighbor impact (this is the key fix!)
-    if neighbor_count <= 2:
-        neighbor_multiplier = 1.0
-    elif neighbor_count <= 5:
-        # Quadratic growth for small neighbor counts
-        neighbor_multiplier = 1.0 + (neighbor_count * 0.15)**1.5  # ~1.45x at 5 neighbors
-    elif neighbor_count <= 15:
-        # Stronger exponential growth for medium density
-        base_impact = 1.0 + (5 * 0.15)**1.5  # Start from 5-neighbor impact
-        additional_neighbors = neighbor_count - 5
-        neighbor_multiplier = base_impact + (additional_neighbors * 0.25)**1.3  # More aggressive
-    elif neighbor_count <= 30:
-        # Very aggressive growth for high density
-        base_impact = 1.0 + (5 * 0.15)**1.5 + (10 * 0.25)**1.3
-        additional_neighbors = neighbor_count - 15
-        neighbor_multiplier = base_impact + (additional_neighbors * 0.4)**1.2  # Even more aggressive
-    else:
-        # Extreme density - near-exponential growth
-        base_impact = 1.0 + (5 * 0.15)**1.5 + (10 * 0.25)**1.3 + (15 * 0.4)**1.2
-        additional_neighbors = neighbor_count - 30
-        neighbor_multiplier = base_impact + (additional_neighbors * 0.6)**1.1  # Exponential scaling
-    
-    # Cap neighbor multiplier to prevent unrealistic values
-    neighbor_multiplier = min(neighbor_multiplier, 50.0)  # Max 50x impact
-    
-    effective_cw = min(1023, base_cw * cw_multiplier * neighbor_multiplier)
-    
-    # ENHANCED: Channel access delay with proper modeling
-    avg_backoff_time = (effective_cw / 2) * slot_time
-    
-    # ENHANCED: Additional carrier sensing delays in high density
-    if neighbor_count > 5:
-        # More frequent carrier sensing due to higher channel activity
-        carrier_sense_delay = neighbor_count * 0.000002  # 2μs per neighbor above 5
-        carrier_sense_delay = min(carrier_sense_delay, 0.001)  # Cap at 1ms
-    else:
-        carrier_sense_delay = 0
-    
-    # DIFS waiting time (constant)
-    difs_time = difs
-    
-    # ENHANCED: Realistic retransmission delays with exponential backoff
-    if per > 0.001:
-        # Calculate expected number of retransmissions
-        base_expected_retries = per / (1 - per + 1e-10)
+        """ENHANCED: Calculate detailed MAC layer latency with aggressive density scaling"""
         
-        # ENHANCED: Neighbor density increases collision probability exponentially
-        if neighbor_count <= 5:
-            density_retry_factor = 1.0
+        # IEEE 802.11bd MAC timing parameters
+        sifs = 16e-6  # 16 μs
+        difs = 34e-6  # 34 μs  
+        slot_time = 9e-6  # 9 μs
+        
+        # ENHANCED: More aggressive CBR impact starting at lower thresholds
+        base_cw = 15  # IEEE 802.11bd CWmin
+        
+        if cbr <= 0.08:
+            cw_multiplier = 1.0
+        elif cbr <= 0.15:
+            cw_multiplier = 1.8    # Start scaling earlier
+        elif cbr <= 0.25:
+            cw_multiplier = 3.0    # More aggressive for medium CBR
+        elif cbr <= 0.4:
+            cw_multiplier = 5.0    # Increased from 2.0
+        elif cbr <= 0.6:
+            cw_multiplier = 8.0    # Increased from 4.5
+        elif cbr <= 0.8:
+            cw_multiplier = 12.0   # Increased from 8.0
+        else:
+            # VERY aggressive for high CBR (>0.8)
+            excess_cbr = cbr - 0.8
+            cw_multiplier = 12.0 + (excess_cbr * 30.0)  # Can reach 18x at CBR=1.0
+        
+        # ENHANCED: More aggressive neighbor impact starting earlier
+        if neighbor_count <= 1:
+            neighbor_multiplier = 1.0
+        elif neighbor_count <= 3:
+            # Start scaling earlier with quadratic growth
+            neighbor_multiplier = 1.0 + (neighbor_count * 0.25)**1.5  # ~1.6x at 3 neighbors
+        elif neighbor_count <= 8:
+            # Medium density - more aggressive scaling in this range
+            base_impact = 1.0 + (3 * 0.25)**1.5  # Start from 3-neighbor impact
+            additional_neighbors = neighbor_count - 3
+            neighbor_multiplier = base_impact + (additional_neighbors * 0.4)**1.3  # Much more aggressive
         elif neighbor_count <= 15:
-            density_retry_factor = 1.0 + ((neighbor_count - 5) * 0.3)**1.2  # Exponential growth
+            # High density - exponential growth
+            base_impact = 1.0 + (3 * 0.25)**1.5 + (5 * 0.4)**1.3
+            additional_neighbors = neighbor_count - 8
+            neighbor_multiplier = base_impact + (additional_neighbors * 0.6)**1.2  # Even more aggressive
         elif neighbor_count <= 30:
-            density_retry_factor = 1.0 + (10 * 0.3)**1.2 + ((neighbor_count - 15) * 0.5)**1.1
+            # Very high density - near-exponential growth
+            base_impact = 1.0 + (3 * 0.25)**1.5 + (5 * 0.4)**1.3 + (7 * 0.6)**1.2
+            additional_neighbors = neighbor_count - 15
+            neighbor_multiplier = base_impact + (additional_neighbors * 0.8)**1.1  # Exponential scaling
         else:
-            density_retry_factor = 1.0 + (10 * 0.3)**1.2 + (15 * 0.5)**1.1 + ((neighbor_count - 30) * 0.8)
+            # Extreme density - exponential growth
+            base_impact = 1.0 + (3 * 0.25)**1.5 + (5 * 0.4)**1.3 + (7 * 0.6)**1.2 + (15 * 0.8)**1.1
+            additional_neighbors = neighbor_count - 30
+            neighbor_multiplier = base_impact + (additional_neighbors * 1.0)**1.05  # Exponential scaling
         
-        expected_retries = min(7, base_expected_retries * density_retry_factor)
+        # Cap neighbor multiplier to prevent unrealistic values
+        neighbor_multiplier = min(neighbor_multiplier, 50.0)  # Max 50x impact
         
-        # ENHANCED: Exponential backoff calculation (IEEE 802.11 standard)
-        total_retry_delay = 0
-        current_cw = base_cw
+        effective_cw = min(1023, base_cw * cw_multiplier * neighbor_multiplier)
         
-        for retry in range(int(expected_retries) + 1):
-            # Exponential backoff: CW doubles each retry
-            current_cw = min(1023, current_cw * 2)
-            
-            # Average backoff for this retry level
-            retry_backoff = (current_cw / 2) * slot_time
-            
-            # Add transmission time + DIFS + backoff for each retry
-            single_retry_delay = phy_tx_time + difs + retry_backoff
-            
-            # Weight by probability of reaching this retry level
-            retry_probability = (per ** retry) * (1 - per)  # Geometric distribution
-            total_retry_delay += single_retry_delay * retry_probability
+        # ENHANCED: Channel access delay with proper modeling
+        avg_backoff_time = (effective_cw / 2) * slot_time
         
-        retry_delay = total_retry_delay * expected_retries
-    else:
-        retry_delay = 0
-        expected_retries = 0
-    
-    # ENHANCED: Queue waiting time with aggressive density scaling
-    if cbr > 0.4 or neighbor_count > 8:  # Lowered thresholds
-        # Base congestion factor
-        cbr_congestion = max(0, (cbr - 0.4) / 0.6)  # 0 to 1 scale
-        neighbor_congestion = max(0, (neighbor_count - 8) / 22)  # 0 to 1 scale for 8-30 neighbors
-        
-        # Combined congestion impact (multiplicative for exponential effect)
-        congestion_factor = 1.0 + (cbr_congestion * neighbor_congestion * 5.0)  # Up to 6x
-        
-        # Additional density-specific queuing
-        if neighbor_count > 15:
-            density_queue_factor = 1.0 + ((neighbor_count - 15) * 0.1)**1.3  # Exponential for high density
+        # ENHANCED: Additional carrier sensing delays in high density
+        if neighbor_count > 5:
+            # More frequent carrier sensing due to higher channel activity
+            carrier_sense_delay = neighbor_count * 0.000002  # 2μs per neighbor above 5
+            carrier_sense_delay = min(carrier_sense_delay, 0.001)  # Cap at 1ms
         else:
-            density_queue_factor = 1.0
+            carrier_sense_delay = 0
         
-        # Base queue delay
-        base_queue_delay = (difs + avg_backoff_time) * 0.5
-        queue_delay = base_queue_delay * congestion_factor * density_queue_factor
+        # DIFS waiting time (constant)
+        difs_time = difs
         
-        # Additional per-neighbor queuing impact
-        queue_delay += neighbor_count * 0.00005  # 50μs per neighbor
+        # ENHANCED: Realistic retransmission delays with exponential backoff
+        if per > 0.001:
+            # Calculate expected number of retransmissions
+            base_expected_retries = per / (1 - per + 1e-10)
+            
+            # ENHANCED: Neighbor density increases collision probability exponentially
+            if neighbor_count <= 5:
+                density_retry_factor = 1.0
+            elif neighbor_count <= 15:
+                density_retry_factor = 1.0 + ((neighbor_count - 5) * 0.3)**1.2  # Exponential growth
+            elif neighbor_count <= 30:
+                density_retry_factor = 1.0 + (10 * 0.3)**1.2 + ((neighbor_count - 15) * 0.5)**1.1
+            else:
+                density_retry_factor = 1.0 + (10 * 0.3)**1.2 + (15 * 0.5)**1.1 + ((neighbor_count - 30) * 0.8)
+            
+            expected_retries = min(7, base_expected_retries * density_retry_factor)
+            
+            # ENHANCED: Exponential backoff calculation (IEEE 802.11 standard)
+            total_retry_delay = 0
+            current_cw = base_cw
+            
+            for retry in range(int(expected_retries) + 1):
+                # Exponential backoff: CW doubles each retry
+                current_cw = min(1023, current_cw * 2)
+                
+                # Average backoff for this retry level
+                retry_backoff = (current_cw / 2) * slot_time
+                
+                # Add transmission time + DIFS + backoff for each retry
+                single_retry_delay = phy_tx_time + difs + retry_backoff
+                
+                # Weight by probability of reaching this retry level
+                retry_probability = (per ** retry) * (1 - per)  # Geometric distribution
+                total_retry_delay += single_retry_delay * retry_probability
+            
+            retry_delay = total_retry_delay * expected_retries
+        else:
+            retry_delay = 0
+            expected_retries = 0
         
-    else:
-        queue_delay = 0
-    
-    # ENHANCED: MAC processing overhead increases with density
-    base_mac_processing = 5e-6  # 5 μs base MAC processing
-    if neighbor_count > 10:
-        # Additional processing for busy channels
-        additional_processing = (neighbor_count - 10) * 1e-6  # 1μs per neighbor above 10
-        mac_processing = base_mac_processing + additional_processing
-    else:
-        mac_processing = base_mac_processing
-    
-    # ENHANCED: Inter-frame spacing delays in dense networks
-    if neighbor_count > 20:
-        # Additional spacing due to hidden terminals and synchronization issues
-        inter_frame_delay = (neighbor_count - 20) * 2e-6  # 2μs per neighbor above 20
-        inter_frame_delay = min(inter_frame_delay, 0.0005)  # Cap at 500μs
-    else:
-        inter_frame_delay = 0
-    
-    # Calculate total MAC latency
-    total_mac_latency = (difs_time + avg_backoff_time + retry_delay + 
-                        queue_delay + mac_processing + carrier_sense_delay + 
-                        inter_frame_delay)
-    
-    return {
-        'difs_latency_ms': difs_time * 1000,
-        'backoff_latency_ms': (avg_backoff_time + carrier_sense_delay) * 1000,
-        'retry_latency_ms': retry_delay * 1000,
-        'queue_latency_ms': queue_delay * 1000,
-        'mac_processing_latency_ms': (mac_processing + inter_frame_delay) * 1000,
-        'total_mac_latency_ms': total_mac_latency * 1000,
-        'retry_count': expected_retries,
-        'effective_cw': effective_cw,
-        'neighbor_multiplier': neighbor_multiplier,
-        'congestion_factor': locals().get('congestion_factor', 1.0)
-    }
+        # ENHANCED: Queue waiting time with aggressive density scaling
+        if cbr > 0.4 or neighbor_count > 8:  # Lowered thresholds
+            # Base congestion factor
+            cbr_congestion = max(0, (cbr - 0.4) / 0.6)  # 0 to 1 scale
+            neighbor_congestion = max(0, (neighbor_count - 8) / 22)  # 0 to 1 scale for 8-30 neighbors
+            
+            # Combined congestion impact (multiplicative for exponential effect)
+            congestion_factor = 1.0 + (cbr_congestion * neighbor_congestion * 5.0)  # Up to 6x
+            
+            # Additional density-specific queuing
+            if neighbor_count > 15:
+                density_queue_factor = 1.0 + ((neighbor_count - 15) * 0.1)**1.3  # Exponential for high density
+            else:
+                density_queue_factor = 1.0
+            
+            # Base queue delay
+            base_queue_delay = (difs + avg_backoff_time) * 0.5
+            queue_delay = base_queue_delay * congestion_factor * density_queue_factor
+            
+            # Additional per-neighbor queuing impact
+            queue_delay += neighbor_count * 0.00005  # 50μs per neighbor
+            
+        else:
+            queue_delay = 0
+        
+        # ENHANCED: MAC processing overhead increases with density
+        base_mac_processing = 5e-6  # 5 μs base MAC processing
+        if neighbor_count > 10:
+            # Additional processing for busy channels
+            additional_processing = (neighbor_count - 10) * 1e-6  # 1μs per neighbor above 10
+            mac_processing = base_mac_processing + additional_processing
+        else:
+            mac_processing = base_mac_processing
+        
+        # ENHANCED: Inter-frame spacing delays in dense networks
+        if neighbor_count > 20:
+            # Additional spacing due to hidden terminals and synchronization issues
+            inter_frame_delay = (neighbor_count - 20) * 2e-6  # 2μs per neighbor above 20
+            inter_frame_delay = min(inter_frame_delay, 0.0005)  # Cap at 500μs
+        else:
+            inter_frame_delay = 0
+        
+        # Calculate total MAC latency
+        total_mac_latency = (difs_time + avg_backoff_time + retry_delay + 
+                            queue_delay + mac_processing + carrier_sense_delay + 
+                            inter_frame_delay)
+        
+        return {
+            'difs_latency_ms': difs_time * 1000,
+            'backoff_latency_ms': (avg_backoff_time + carrier_sense_delay) * 1000,
+            'retry_latency_ms': retry_delay * 1000,
+            'queue_latency_ms': queue_delay * 1000,
+            'mac_processing_latency_ms': (mac_processing + inter_frame_delay) * 1000,
+            'total_mac_latency_ms': total_mac_latency * 1000,
+            'retry_count': expected_retries,
+            'effective_cw': effective_cw,
+            'neighbor_multiplier': neighbor_multiplier,
+            'congestion_factor': locals().get('congestion_factor', 1.0)
+        }
     
         
     def _calculate_enhanced_contention_delay(self, cbr: float, num_neighbors: int) -> float:
@@ -11732,6 +11741,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
