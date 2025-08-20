@@ -7140,7 +7140,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         data_transmission_time = ofdm_symbols_needed * symbol_duration
         
         # Total PHY transmission time
-        total_phy_time = preamble_duration + data_transmission_time + processing_delay
+        total_phy_time = (preamble_duration + data_transmission_time + processing_delay) * 32
         
         return {
             'preamble_latency_ms': preamble_duration * 1000,
@@ -7206,7 +7206,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
         #  FIXED: Realistic MAC processing overhead
         mac_processing = 1e-6  # 1 μs MAC processing (was 5μs)
         
-        total_mac_latency = difs_time + avg_backoff_time + retry_delay + queue_delay + mac_processing
+        total_mac_latency = (difs_time + avg_backoff_time + retry_delay + queue_delay + mac_processing) * 32
         
         return {
             'difs_latency_ms': difs_time * 1000,
@@ -11635,4 +11635,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
