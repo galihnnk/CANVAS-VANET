@@ -8198,6 +8198,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     if vehicle_id in self.vehicles:
                         self._update_sdn_metrics(vehicle_id, current_time)
             
+            
             # Phase 8: Calculate performance metrics and create results
             timestamp_results = []
             
@@ -8246,7 +8247,8 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     print(f"[ENHANCED DEBUG] {episode_info}Vehicle {vehicle_id} | {l3_info} | {sdn_info}")
                     print(f"  Neighbors: {len(vehicle.neighbors)} | SINR: {vehicle.current_snr:.1f} dB | CBR: {vehicle.current_cbr:.3f}")
                     print(f"  PER: {metrics['per']:.4f} | PDR: {metrics['pdr']:.4f} | Throughput: {metrics['throughput']/1e6:.2f} Mbps")
-                    print(f"  L3 Delay: {metrics.get('l3_routing_delay', 0)*1000:.2f} ms | SDN Delay: {metrics.get('sdn_processing_delay', 0)*1000:.2f} ms")
+                    print(f"  Total Latency: {metrics['latency']:.2f} ms | PHY: {metrics.get('phy_latency_ms', 0):.2f} ms | MAC: {metrics.get('mac_latency_ms', 0):.2f} ms")
+                    print(f"  L3 Delay: {metrics.get('l3_routing_delay', 0):.2f} ms | SDN Delay: {metrics.get('sdn_processing_delay', 0):.2f} ms")
                     
                     if self.enable_rl:
                         print(f"  RL Params: Power={vehicle.transmission_power:.1f}dBm, MCS={vehicle.mcs}, Beacon={vehicle.beacon_rate:.1f}Hz")
@@ -8284,7 +8286,24 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     'MACThroughput': metrics['throughput'] / 1e6,
                     'MACEfficiency': metrics.get('mac_efficiency', 0),
                     'Throughput': metrics['throughput'] / 1e6,
-                    'Latency': metrics['latency'] * 1000,  # Convert to ms
+                    
+                    # FIXED: Extract ALL detailed latency components from metrics dictionary
+                    'Total_Latency_ms': metrics['latency'],  # Already in ms
+                    'PHY_Latency_ms': metrics.get('phy_latency_ms', 0),
+                    'MAC_Latency_ms': metrics.get('mac_latency_ms', 0),
+                    'Preamble_Latency_ms': metrics.get('preamble_latency_ms', 0),
+                    'DataTX_Latency_ms': metrics.get('data_tx_latency_ms', 0),
+                    'DIFS_Latency_ms': metrics.get('difs_latency_ms', 0),
+                    'Backoff_Latency_ms': metrics.get('backoff_latency_ms', 0),
+                    'Retry_Latency_ms': metrics.get('retry_latency_ms', 0),
+                    'Queue_Latency_ms': metrics.get('queue_latency_ms', 0),
+                    'L3_Routing_Delay_ms': metrics.get('l3_routing_delay', 0),
+                    'SDN_Processing_Delay_ms': metrics.get('sdn_processing_delay', 0),
+                    
+                    # LEGACY: Keep for backward compatibility
+                    'Latency': metrics['latency'],  # Total latency in ms
+                    
+                    # Performance metrics
                     'BER': metrics['ber'],
                     'SER': metrics['ser'],
                     'PER_PHY_Base': metrics.get('per_phy', metrics['per']),
@@ -8293,6 +8312,12 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     'PER': metrics['per'],
                     'CollisionProb': metrics.get('collision_prob', 0),
                     'CBR': vehicle.current_cbr,
+                    
+                    # FIXED: Extract offered load and congestion metrics if available
+                    'OfferedLoad': metrics.get('offered_load', vehicle.current_cbr),
+                    'CongestionRatio': metrics.get('congestion_ratio', 1.0),
+                    'ChannelOverload': metrics.get('channel_overload', 'No'),
+                    
                     'SINR': vehicle.current_snr,
                     'SignalPower_dBm': metrics.get('signal_power_dbm', 0),
                     'InterferencePower_dBm': metrics.get('interference_power_dbm', 0),
@@ -8328,7 +8353,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     'OriginalTimestamp': current_time - (episode_boundaries[current_episode-1][1] if self.fcd_reload_count > 1 else 0),
                     'ReloadStrategy': self.fcd_reload_strategy,
                     
-                    # NEW: Layer 3 metrics
+                    # Layer 3 metrics
                     'L3_Enabled': self.config.enable_layer3,
                     'RoutingProtocol': self.config.routing_protocol if self.config.enable_layer3 else 'None',
                     'RoutingTableSize': len(vehicle.routing_table) if hasattr(vehicle, 'routing_table') else 0,
@@ -8344,7 +8369,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     'HopCount': sum(vehicle.l3_metrics.get('hop_count_distribution', [0])) / max(1, len(vehicle.l3_metrics.get('hop_count_distribution', [1]))) if hasattr(vehicle, 'l3_metrics') else 0,
                     'L3_PDR': vehicle.packet_counters.get('delivered', 0) / max(1, vehicle.packet_counters.get('generated', 1)) if hasattr(vehicle, 'packet_counters') else 0,
                     
-                    # NEW: SDN metrics
+                    # SDN metrics
                     'SDN_Enabled': self.config.enable_sdn,
                     'FlowTableSize': len(vehicle.flow_table) if hasattr(vehicle, 'flow_table') else 0,
                     'ActiveFlows': sum(1 for flow in vehicle.flow_table.values() if flow.state == FlowState.ACTIVE) if hasattr(vehicle, 'flow_table') else 0,
@@ -8356,7 +8381,7 @@ class VANET_IEEE80211bd_L3_SDN_Simulator:
                     'TrafficEngineeringEvents': self.sdn_performance_monitor.get('traffic_engineering_events', 0),
                     'SDN_Throughput_Improvement': 1.0,  # Placeholder for SDN throughput improvement
                     
-                    # NEW: Application-specific metrics
+                    # Application-specific metrics
                     'SafetyPackets': len(vehicle.application_traffic.get('SAFETY', [])) if hasattr(vehicle, 'application_traffic') else 0,
                     'InfotainmentPackets': len(vehicle.application_traffic.get('INFOTAINMENT', [])) if hasattr(vehicle, 'application_traffic') else 0,
                     'SensingPackets': len(vehicle.application_traffic.get('SENSING', [])) if hasattr(vehicle, 'application_traffic') else 0,
@@ -11610,3 +11635,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
